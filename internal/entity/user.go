@@ -20,17 +20,16 @@ type User struct {
 	ID        int64
 	Coins     int
 	UserName  string
-	Inventory Inventory
+	Inventory []Inventory
 }
 
 type Inventory struct {
 	UserID   int64
 	Item     string
-	quantity int
+	Quantity int
 }
 
 type CoinHistory struct {
-	UserID   int64
 	FromUser string
 	ToUser   string
 	Amount   int
@@ -49,6 +48,6 @@ func NewUser(coins int, username string) User {
 		ID:        int64(userID),
 		Coins:     coins,
 		UserName:  username,
-		Inventory: Inventory{},
+		Inventory: []Inventory{},
 	}
 }
