@@ -22,6 +22,8 @@ type Config struct {
 	Issuer      string
 	TokenTTL    time.Duration
 	CacheTTL    time.Duration
+	SLI         time.Duration
+	ADDR        string
 }
 
 func ConfigLoad() *Config {
@@ -47,6 +49,13 @@ func ConfigLoad() *Config {
 		panic(err)
 	}
 
+	sli, err := parseDuration(os.Getenv("SLI"))
+	if err != nil {
+		panic(err)
+	}
+
+	addr := os.Getenv("ADDR")
+
 	cfg := &Config{
 		DBPath:      make([]string, shardCount),
 		ShardNumber: shardCount,
@@ -54,6 +63,8 @@ func ConfigLoad() *Config {
 		Issuer:      issuer,
 		TokenTTL:    tokenTTL,
 		CacheTTL:    cacheTTL,
+		SLI:         sli,
+		ADDR:        addr,
 	}
 
 	for i := 0; i < shardCount; i++ {
