@@ -1,10 +1,8 @@
 package merch
 
 import (
-	"context"
 	"errors"
 	"merch/internal/api/utilapi"
-	"merch/internal/entity"
 	"merch/internal/usecase/storage/repo/postgres"
 	"net/http"
 	"strconv"
@@ -34,25 +32,9 @@ func (m *MerchHandlder) SendCoin(ctx *utilapi.APIContext) {
 	id := ctx.GetFromHeader("id")
 	fromUserID, _ := strconv.Atoi(id)
 
-	var toUserID int
+	user := m.getUser(req.ToUser)
 
-	user, ok := m.cache.Get(req.ToUser)
-	if !ok {
-		getUser, err := m.user.GetUser(context.Background(), req.ToUser)
-		if err != nil {
-			ctx.Error("failed to search user", err)
-			ctx.WriteFailure(http.StatusBadRequest, "invalid request")
-			return
-		}
-		m.cache.Set(req.ToUser, entity.User{
-			ID:       getUser.ID,
-			Coins:    0,
-			UserName: req.ToUser,
-		})
-		toUserID = int(getUser.ID)
-	} else {
-		toUserID = int(user.(entity.User).ID)
-	}
+	toUserID := int(user.ID)
 
 	err = m.user.Transfer(ctx, fromUserID, toUserID, req.Amount)
 	if err != nil {

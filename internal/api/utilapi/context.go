@@ -94,6 +94,10 @@ func (ctx *APIContext) GetFromHeader(key string) string {
 	return ctx.r.Header.Get(key)
 }
 
+func (ctx *APIContext) GetFromQuery(key string) string {
+	return ctx.r.URL.Query().Get(key)
+}
+
 func (ctx *APIContext) Deadline() (deadline time.Time, ok bool) {
 	return ctx.ctx.Deadline()
 }
