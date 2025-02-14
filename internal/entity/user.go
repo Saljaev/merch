@@ -1,10 +1,12 @@
 package entity
 
 import (
+	"crypto/rand"
 	"fmt"
 	"github.com/sony/sonyflake"
 	"golang.org/x/crypto/bcrypt"
 	"log/slog"
+	"math/big"
 )
 
 const DefaultCoins = 1000
@@ -41,18 +43,19 @@ type CoinHistory struct {
 }
 
 func NewUser(username, password string) (User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
 	if err != nil {
 		return User{}, fmt.Errorf("failed to hash password: %w", err)
 	}
-
+	
+	t, _ := rand.Int(rand.Reader, big.NewInt(100000000))
 	userID, err := sf.NextID()
 	if err != nil {
 		return User{}, fmt.Errorf("failed to generate userID: %w", err)
 	}
 
 	return User{
-		ID:        int64(userID),
+		ID:        int64(userID) + t.Int64(),
 		Coins:     DefaultCoins,
 		UserName:  username,
 		Password:  string(hashedPassword),
