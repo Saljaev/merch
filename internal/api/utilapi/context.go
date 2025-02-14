@@ -22,9 +22,8 @@ type APIContext struct {
 	cancel context.CancelFunc
 }
 
-func newAPIContext(w http.ResponseWriter, req *http.Request, log *slog.Logger) *APIContext {
-	ctx, cancel := context.WithCancel(req.Context())
-
+func newAPIContext(w http.ResponseWriter, req *http.Request, log *slog.Logger, sli time.Duration) *APIContext {
+	ctx, cancel := context.WithTimeout(req.Context(), sli)
 	r := req.WithContext(ctx)
 
 	return &APIContext{
@@ -96,6 +95,14 @@ func (ctx *APIContext) GetFromHeader(key string) string {
 
 func (ctx *APIContext) GetFromQuery(key string) string {
 	return ctx.r.URL.Query().Get(key)
+}
+
+func (ctx *APIContext) SetValue(key, value any) {
+	ctx.ctx = context.WithValue(ctx.ctx, key, value)
+}
+
+func (ctx *APIContext) GetValue(key string) any {
+	return ctx.ctx.Value(key)
 }
 
 func (ctx *APIContext) Deadline() (deadline time.Time, ok bool) {
