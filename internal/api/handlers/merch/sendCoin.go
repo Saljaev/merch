@@ -5,8 +5,12 @@ import (
 	"merch/internal/api/utilapi"
 	"merch/internal/usecase/storage/repo/postgres"
 	"net/http"
-	"strconv"
 	"unicode/utf8"
+)
+
+var (
+	ErrNotEnoughCoin = errors.New("not enough coin")
+	ErrNotSuchUser   = errors.New("not souch user")
 )
 
 type SendCoinReq struct {
@@ -28,15 +32,24 @@ func (m *MerchHandlder) SendCoin(ctx *utilapi.APIContext) {
 		return
 	}
 
-	//TODO: fromUserID from token JWT
-	id := ctx.GetFromHeader("id")
-	fromUserID, _ := strconv.Atoi(id)
+	username := ctx.GetValue("username").(string)
+	fromUser := m.getUser(username)
 
-	user := m.getUser(req.ToUser)
+	toUser := m.getUser(req.ToUser)
 
-	toUserID := int(user.ID)
+	if toUser.UserName == "" {
+		ctx.Error("not such user", ErrNotSuchUser)
+		ctx.WriteFailure(http.StatusBadRequest, "not such user")
+		return
+	}
 
-	err = m.user.Transfer(ctx, fromUserID, toUserID, req.Amount)
+	if fromUser.Coins-req.Amount < 0 {
+		ctx.Error("not enough coin", ErrNotEnoughCoin)
+		ctx.WriteFailure(http.StatusBadRequest, "not enough coin")
+		return
+	}
+
+	err = m.user.Transfer(ctx, req.Amount, fromUser, toUser)
 	if err != nil {
 		ctx.Error("failed to transfer coin", err)
 		if errors.Is(err, postgres.ErrNotEnoughCoins) {
@@ -47,6 +60,12 @@ func (m *MerchHandlder) SendCoin(ctx *utilapi.APIContext) {
 		return
 	}
 
-	ctx.Info("successful transfer coin to user", "user", req.ToUser)
+	fromUser.Coins -= req.Amount
+	m.cache.Set(fromUser.UserName, fromUser)
+
+	toUser.Coins -= req.Amount
+	m.cache.Set(toUser.UserName, toUser)
+
+	ctx.Info("successful transfer coin to user", "to_user", req.ToUser)
 	ctx.SuccessWithData("OK")
 }

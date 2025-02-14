@@ -31,11 +31,11 @@ type (
 )
 
 func (m *MerchHandlder) Info(ctx *utilapi.APIContext) {
-	//TODO: get username from token
-	username := ctx.GetFromHeader("username")
+	username := ctx.GetValue("username").(string)
+
 	user := m.getUser(username)
 
-	userInfo, history, err := m.user.GetInfo(ctx, int(user.ID))
+	userInfo, history, err := m.user.GetInfo(ctx, user)
 	if err != nil {
 		ctx.Error("failed to get info user", err)
 		ctx.WriteFailure(http.StatusInternalServerError, "internal error")

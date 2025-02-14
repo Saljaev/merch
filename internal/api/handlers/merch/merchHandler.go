@@ -37,7 +37,6 @@ func (m *MerchHandlder) getUser(username string) entity.User {
 		return getUser
 	}
 
-	//TODO: valid from nil
 	u := user.(entity.User)
 
 	return u

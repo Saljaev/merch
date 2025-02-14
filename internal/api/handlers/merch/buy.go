@@ -2,7 +2,6 @@ package merch
 
 import (
 	"errors"
-	"fmt"
 	"merch/internal/api/utilapi"
 	shoprepo "merch/internal/usecase/shop/repo"
 	"net/http"
@@ -12,7 +11,6 @@ var ErrInvalidItem = errors.New("no such item")
 
 func (m *MerchHandlder) Buy(ctx *utilapi.APIContext) {
 	item := ctx.GetFromQuery("item")
-	fmt.Println(item)
 
 	if item == "" {
 		ctx.Error("invalid item", ErrInvalidItem)
@@ -20,8 +18,8 @@ func (m *MerchHandlder) Buy(ctx *utilapi.APIContext) {
 		return
 	}
 
-	//TODO: username from token
-	username := ctx.GetFromHeader("username")
+	username := ctx.GetValue("username").(string)
+
 	user := m.getUser(username)
 	cost, err := m.shop.Buy(user.Coins, item)
 	if err != nil {
@@ -35,7 +33,7 @@ func (m *MerchHandlder) Buy(ctx *utilapi.APIContext) {
 		return
 	}
 
-	err = m.user.Purchase(ctx, int(user.ID), cost, item)
+	err = m.user.Purchase(ctx, user, cost, item)
 	if err != nil {
 		ctx.Error("failed to buy item", err)
 		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
