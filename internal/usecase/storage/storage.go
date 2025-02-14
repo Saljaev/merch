@@ -10,7 +10,7 @@ type UserRepo interface {
 	Purchase(ctx context.Context, userID, value int, item string) error
 	GetInfo(ctx context.Context, userID int) (entity.User, []entity.CoinHistory, error)
 	Transfer(ctx context.Context, fromUserID, toUserID, amount int) error
-	GetUser(ctx context.Context, username string) (entity.User, error)
+	GetUserByUsername(ctx context.Context, username string) (entity.User, error)
 }
 
 type Storage struct {
@@ -33,8 +33,8 @@ func (s *Storage) Transfer(ctx context.Context, fromUserID, toUserID, amount int
 	return s.repo.Transfer(ctx, fromUserID, toUserID, amount)
 }
 
-func (s *Storage) GetUser(ctx context.Context, username string) (entity.User, error) {
-	return s.repo.GetUser(ctx, username)
+func (s *Storage) GetUserByUsername(ctx context.Context, username string) (entity.User, error) {
+	return s.repo.GetUserByUsername(ctx, username)
 }
 
 func NewStorage(repo UserRepo) *Storage {

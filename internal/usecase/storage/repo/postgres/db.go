@@ -115,7 +115,7 @@ func (p *PgRepo) Transfer(ctx context.Context, fromUserID, toUserID, amount int)
 	return nil
 }
 
-func (p *PgRepo) GetUser(ctx context.Context, username string) (entity.User, error) {
+func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity.User, error) {
 	for _, db := range p.ShardMap {
 		var user entity.User
 
