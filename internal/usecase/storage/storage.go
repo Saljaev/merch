@@ -7,9 +7,9 @@ import (
 
 type UserRepo interface {
 	AddUser(ctx context.Context, user entity.User) (int, error)
-	Purchase(ctx context.Context, userID, value int, item string) error
-	GetInfo(ctx context.Context, userID int) (entity.User, []entity.CoinHistory, error)
-	Transfer(ctx context.Context, fromUserID, toUserID, amount int) error
+	Purchase(ctx context.Context, user entity.User, value int, item string) error
+	Transfer(ctx context.Context, amount int, fromUser, toUser entity.User) error
+	GetInfo(ctx context.Context, user entity.User) (entity.User, []entity.CoinHistory, error)
 	GetUserByUsername(ctx context.Context, username string) (entity.User, error)
 }
 
@@ -21,16 +21,16 @@ func (s *Storage) AddUser(ctx context.Context, user entity.User) (int, error) {
 	return s.repo.AddUser(ctx, user)
 }
 
-func (s *Storage) Purchase(ctx context.Context, userID, value int, item string) error {
-	return s.repo.Purchase(ctx, userID, value, item)
+func (s *Storage) Purchase(ctx context.Context, user entity.User, value int, item string) error {
+	return s.repo.Purchase(ctx, user, value, item)
 }
 
-func (s *Storage) GetInfo(ctx context.Context, userID int) (entity.User, []entity.CoinHistory, error) {
-	return s.repo.GetInfo(ctx, userID)
+func (s *Storage) GetInfo(ctx context.Context, user entity.User) (entity.User, []entity.CoinHistory, error) {
+	return s.repo.GetInfo(ctx, user)
 }
 
-func (s *Storage) Transfer(ctx context.Context, fromUserID, toUserID, amount int) error {
-	return s.repo.Transfer(ctx, fromUserID, toUserID, amount)
+func (s *Storage) Transfer(ctx context.Context, amount int, fromUserID, toUserID entity.User) error {
+	return s.repo.Transfer(ctx, amount, fromUserID, toUserID)
 }
 
 func (s *Storage) GetUserByUsername(ctx context.Context, username string) (entity.User, error) {
