@@ -26,7 +26,7 @@ func (m *JWTManager) Generate(user entity.User, customClaims map[string]string) 
 	now := time.Now()
 
 	claims := jwt.MapClaims{
-		"sub": user.ID,
+		"sub": user.UserName,
 		"iss": m.issuer,
 		"exp": jwt.NewNumericDate(now.Add(m.tokenDuration)),
 		"iat": jwt.NewNumericDate(now),
@@ -40,8 +40,8 @@ func (m *JWTManager) Generate(user entity.User, customClaims map[string]string) 
 	return token.SignedString([]byte(m.secret))
 }
 
-func (m *JWTManager) Parse(token string, withOUtValidation bool) (string, map[string]string) {
-	originClaims, err := m.parseToken(token, withOUtValidation)
+func (m *JWTManager) Parse(token string, withOutValidation bool) (string, map[string]string) {
+	originClaims, err := m.parseToken(token, withOutValidation)
 	if err != nil {
 		return "", map[string]string{"error": err.Error()}
 	}
@@ -68,7 +68,7 @@ func (m *JWTManager) Parse(token string, withOUtValidation bool) (string, map[st
 
 func (m *JWTManager) parseToken(token string, withoutValidation bool) (jwt.MapClaims, error) {
 	options := []jwt.ParserOption{
-		jwt.WithValidMethods([]string{jwt.SigningMethodHS512.Name}),
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
 		jwt.WithIssuer(m.issuer),
 	}
 
@@ -79,18 +79,13 @@ func (m *JWTManager) parseToken(token string, withoutValidation bool) (jwt.MapCl
 	parser := jwt.NewParser(options...)
 
 	parsed, err := parser.Parse(token, func(t *jwt.Token) (interface{}, error) {
-		//_, err := t.Claims.GetSubject()
-		//if err != nil {
-		//	return nil, err
-		//}
 		return []byte(m.secret), nil
 	})
 
 	if err != nil || parsed == nil {
-		return nil, fmt.Errorf("failed to parse token: %w", err)
+		return nil, fmt.Errorf("failed to parse token: %v", err)
 	}
-
-	//TODO: this
+	
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok || !parsed.Valid {
 		return nil, fmt.Errorf("invalid token claims")
