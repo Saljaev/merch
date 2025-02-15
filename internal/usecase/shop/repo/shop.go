@@ -53,7 +53,3 @@ func NewMapStore() *MapStore {
 
 	return &MapStore{store: result}
 }
-
-func (m *MapStore) QWE() {
-
-}
