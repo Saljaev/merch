@@ -23,8 +23,10 @@ type Config struct {
 	TokenTTL    time.Duration
 	CacheTTL    time.Duration
 	SLI         time.Duration
-	SrvRead     time.Duration
 	ADDR        string
+	MaxConn     int
+	MinConn     int
+	LifeConn    time.Duration
 }
 
 func ConfigLoad() *Config {
@@ -33,10 +35,16 @@ func ConfigLoad() *Config {
 		panic(err)
 	}
 
-	shardCount, err := strconv.Atoi(os.Getenv("SHARD_COUNT"))
+	shardCount, _ := strconv.Atoi(os.Getenv("SHARD_COUNT"))
 	user := os.Getenv("POSTGRES_USER")
 	pass := os.Getenv("POSTGRES_PASSWORD")
 	db := os.Getenv("DB")
+	maxConn, _ := strconv.Atoi(os.Getenv("MAX_CONN"))
+	minConn, _ := strconv.Atoi(os.Getenv("MIN_CONN"))
+	lifeConn, err := parseDuration(os.Getenv("LIFE_CONN"))
+	if err != nil {
+		panic(err)
+	}
 
 	secret := os.Getenv("SECRET")
 	issuer := os.Getenv("ISSUER")
@@ -49,13 +57,7 @@ func ConfigLoad() *Config {
 	if err != nil {
 		panic(err)
 	}
-
 	sli, err := parseDuration(os.Getenv("SLI"))
-	if err != nil {
-		panic(err)
-	}
-
-	srvRead, err := parseDuration(os.Getenv("READTIMEOUT"))
 	if err != nil {
 		panic(err)
 	}
@@ -70,8 +72,10 @@ func ConfigLoad() *Config {
 		TokenTTL:    tokenTTL,
 		CacheTTL:    cacheTTL,
 		SLI:         sli,
-		SrvRead:     srvRead,
 		ADDR:        addr,
+		MaxConn:     maxConn,
+		MinConn:     minConn,
+		LifeConn:    lifeConn,
 	}
 
 	for i := 0; i < shardCount; i++ {
