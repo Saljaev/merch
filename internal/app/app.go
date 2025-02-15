@@ -35,13 +35,6 @@ func Run() {
 	repo := postgres.NewRepo(sharMap, cfg.MaxConn, cfg.MinConn, cfg.LifeConn)
 	defer repo.CloseDB()
 
-	for i := range cfg.ShardNumber {
-		err := repo.InitEntity(i)
-		if err != nil {
-			log.Error("failed to up migrations", slog.Any("error", err))
-		}
-	}
-
 	// For generate UserID type int
 	entity.InitSonyflake()
 

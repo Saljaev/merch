@@ -110,6 +110,32 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+  migrate:
+    image: migrate/migrate
+    container_name: migrate
+    networks:
+      - network
+    volumes:
+      - ./internal/migrations:/migrations
+    depends_on:
+      postgres-shard-0:
+        condition: service_healthy
+      postgres-shard-1:
+        condition: service_healthy
+      postgres-shard-2:
+        condition: service_healthy
+      postgres-shard-3:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      for shard in $${PG_SHARD_0} $${PG_SHARD_1} $${PG_SHARD_2} $${PG_SHARD_3}; do
+        echo 'Running migrations for' $shard &&
+        migrate -path=/migrations -database=postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@$${shard}:5432/$${DB}?sslmode=disable up
+      done
+      "
+    env_file:
+      - .env
+
 
 volumes:
   pgdata0:
