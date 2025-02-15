@@ -3,7 +3,7 @@ package merch
 import (
 	"errors"
 	"merch/internal/api/utilapi"
-	"merch/internal/usecase/usecase"
+	"merch/internal/usecase"
 	"net/http"
 	"strconv"
 	"unicode/utf8"

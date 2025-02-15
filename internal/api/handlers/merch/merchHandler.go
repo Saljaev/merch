@@ -2,7 +2,7 @@ package merch
 
 import (
 	"merch/internal/api/handlers/auth"
-	"merch/internal/usecase/usecase"
+	"merch/internal/usecase"
 )
 
 type MerchHandler struct {

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"merch/internal/api/utilapi"
-	"merch/internal/usecase/usecase"
+	"merch/internal/usecase"
 	"net/http"
 	"strconv"
 	"strings"

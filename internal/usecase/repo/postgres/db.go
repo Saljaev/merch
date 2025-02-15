@@ -9,10 +9,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
+	usecase2 "merch/internal/usecase"
 
 	"log/slog"
 	"merch/internal/entity"
-	"merch/internal/usecase/usecase"
 	"time"
 )
 
@@ -80,7 +80,7 @@ func (p *PgRepo) Transfer(ctx context.Context, amount int, fromUser, toUser enti
 	if row.RowsAffected() == 0 {
 		_ = txFrom.Rollback(ctx)
 		_ = txTo.Rollback(ctx)
-		return fmt.Errorf("%s - %w", op, usecase.ErrNotEnoughCoin)
+		return fmt.Errorf("%s - %w", op, usecase2.ErrNotEnoughCoin)
 	}
 
 	query = "UPDATE users SET coins = coins + $1 WHERE id = $2"
@@ -133,7 +133,7 @@ func (p *PgRepo) GetUserByID(ctx context.Context, ID int) (entity.User, error) {
 		}
 	}
 
-	return entity.User{}, fmt.Errorf("%s - %w", op, usecase.ErrUserNotFound)
+	return entity.User{}, fmt.Errorf("%s - %w", op, usecase2.ErrUserNotFound)
 }
 
 func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity.User, error) {
@@ -149,11 +149,11 @@ func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity
 			return user, nil
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			return entity.User{}, fmt.Errorf("%s - db.QueryRow: %w", op, usecase.ErrUserNotFound)
+			return entity.User{}, fmt.Errorf("%s - db.QueryRow: %w", op, usecase2.ErrUserNotFound)
 		}
 	}
 
-	return entity.User{}, fmt.Errorf("%s - %w", op, usecase.ErrUserNotFound)
+	return entity.User{}, fmt.Errorf("%s - %w", op, usecase2.ErrUserNotFound)
 }
 
 func (p *PgRepo) transferInSameShard(ctx context.Context, tx pgx.Tx, amount int, fromUser, toUser entity.User) error {
@@ -335,7 +335,7 @@ func (p *PgRepo) GetTransaction(ctx context.Context, userID int) ([]entity.CoinH
 }
 
 // check for implementation
-var _ usecase.UserRepo = (*PgRepo)(nil)
+var _ usecase2.UserRepo = (*PgRepo)(nil)
 
 func NewRepo(dsns map[int]string, maxConn, minConn int, lifeConn time.Duration) *PgRepo {
 	return &PgRepo{

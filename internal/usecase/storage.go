@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"merch/internal/cache"
 	"merch/internal/entity"
 )
 
@@ -16,8 +15,9 @@ var (
 )
 
 type UseCase struct {
-	repo  UserRepo
-	cache *cache.Cache[string]
+	repo UserRepo
+	//cache *cache.Cache[string]
+	cache Cache[string]
 	shop  ShopRepo
 }
 
@@ -190,7 +190,7 @@ func (u *UseCase) GetUserByUsername(ctx context.Context, username string) (entit
 	return u.repo.GetUserByUsername(ctx, username)
 }
 
-func NewStorage(repo UserRepo, c *cache.Cache[string], shop ShopRepo) *UseCase {
+func NewStorage(repo UserRepo, c Cache[string], shop ShopRepo) *UseCase {
 	return &UseCase{
 		repo:  repo,
 		cache: c,

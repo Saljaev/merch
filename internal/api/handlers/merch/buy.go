@@ -3,7 +3,7 @@ package merch
 import (
 	"errors"
 	"merch/internal/api/utilapi"
-	"merch/internal/usecase/usecase"
+	"merch/internal/usecase"
 	"net/http"
 	"strconv"
 )
@@ -35,7 +35,7 @@ func (m *MerchHandler) Buy(ctx *utilapi.APIContext) {
 		}
 		return
 	}
-	
+
 	ctx.Info("successful buy item", "item", item)
 	ctx.SuccessWithData("OK")
 }

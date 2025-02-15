@@ -4,7 +4,7 @@ import (
 	_ "embed"
 	"errors"
 	"log"
-	"merch/internal/usecase/usecase"
+	usecase2 "merch/internal/usecase"
 	"strconv"
 	"strings"
 )
@@ -13,12 +13,12 @@ type MapStore struct {
 	store map[string]int
 }
 
-var _ usecase.ShopRepo = (*MapStore)(nil)
+var _ usecase2.ShopRepo = (*MapStore)(nil)
 
 func (m *MapStore) GetCost(name string) (int, error) {
 	v, ok := m.store[name]
 	if !ok {
-		return 0, errors.Join(usecase.ErrNoItem)
+		return 0, errors.Join(usecase2.ErrNoItem)
 	}
 
 	return v, nil

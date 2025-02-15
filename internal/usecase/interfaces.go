@@ -5,6 +5,7 @@ import (
 	"merch/internal/entity"
 )
 
+// mockery --all --output=internal/mocks --case=underscore
 type (
 	UserRepo interface {
 		AddUser(ctx context.Context, user entity.User) error
@@ -25,5 +26,10 @@ type (
 
 	ShopRepo interface {
 		GetCost(name string) (int, error)
+	}
+
+	Cache[T comparable] interface {
+		Get(key T) (any, bool)
+		Set(key T, data any)
 	}
 )
