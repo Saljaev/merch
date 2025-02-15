@@ -3,14 +3,14 @@ package merch
 import (
 	"errors"
 	"merch/internal/api/utilapi"
-	"merch/internal/usecase/storage/repo/postgres"
+	"merch/internal/usecase/usecase"
 	"net/http"
+	"strconv"
 	"unicode/utf8"
 )
 
 var (
-	ErrNotEnoughCoin = errors.New("not enough coin")
-	ErrNotSuchUser   = errors.New("not souch user")
+	ErrTransferToYourself = errors.New("transfer coin to yourself")
 )
 
 type SendCoinReq struct {
@@ -22,7 +22,7 @@ func (s *SendCoinReq) IsValid() bool {
 	return utf8.RuneCountInString(s.ToUser) >= 0 && s.Amount > 0
 }
 
-func (m *MerchHandlder) SendCoin(ctx *utilapi.APIContext) {
+func (m *MerchHandler) SendCoin(ctx *utilapi.APIContext) {
 	var req SendCoinReq
 
 	err := ctx.Decode(&req)
@@ -32,39 +32,28 @@ func (m *MerchHandlder) SendCoin(ctx *utilapi.APIContext) {
 		return
 	}
 
-	username := ctx.GetValue("username").(string)
-	fromUser := m.getUser(username)
+	fromUsername := ctx.GetValue("username").(string)
+	idURL := ctx.GetValue("id").(string)
+	fromID, _ := strconv.Atoi(idURL)
 
-	toUser := m.getUser(req.ToUser)
-
-	if toUser.UserName == "" {
-		ctx.Error("not such user", ErrNotSuchUser)
-		ctx.WriteFailure(http.StatusBadRequest, "not such user")
+	if fromUsername == req.ToUser {
+		ctx.Error("failed to transfer", ErrTransferToYourself)
+		ctx.WriteFailure(http.StatusBadRequest, "can't transfer coin to yourself")
 		return
 	}
 
-	if fromUser.Coins-req.Amount < 0 {
-		ctx.Error("not enough coin", ErrNotEnoughCoin)
-		ctx.WriteFailure(http.StatusBadRequest, "not enough coin")
-		return
-	}
-
-	err = m.user.Transfer(ctx, req.Amount, fromUser, toUser)
+	err = m.user.Transfer(ctx, req.Amount, fromID, fromUsername, req.ToUser)
 	if err != nil {
 		ctx.Error("failed to transfer coin", err)
-		if errors.Is(err, postgres.ErrNotEnoughCoins) {
+		if errors.Is(err, usecase.ErrNotEnoughCoin) {
 			ctx.WriteFailure(http.StatusBadRequest, "not enough coin")
+		} else if errors.Is(err, usecase.ErrUserNotFound) {
+			ctx.WriteFailure(http.StatusBadRequest, "not such user")
 		} else {
 			ctx.WriteFailure(http.StatusInternalServerError, "internal error")
 		}
 		return
 	}
-
-	fromUser.Coins -= req.Amount
-	m.cache.Set(fromUser.UserName, fromUser)
-
-	toUser.Coins -= req.Amount
-	m.cache.Set(toUser.UserName, toUser)
 
 	ctx.Info("successful transfer coin to user", "to_user", req.ToUser)
 	ctx.SuccessWithData("OK")

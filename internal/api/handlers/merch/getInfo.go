@@ -4,6 +4,7 @@ import (
 	"merch/internal/api/utilapi"
 	"merch/internal/entity"
 	"net/http"
+	"strconv"
 )
 
 type (
@@ -30,12 +31,16 @@ type (
 	}
 )
 
-func (m *MerchHandlder) Info(ctx *utilapi.APIContext) {
+func (m *MerchHandler) Info(ctx *utilapi.APIContext) {
 	username := ctx.GetValue("username").(string)
+	idURL := ctx.GetValue("id").(string)
+	id, _ := strconv.Atoi(idURL)
 
-	user := m.getUser(username)
+	var userInfo entity.User
+	var history []entity.CoinHistory
+	var err error
 
-	userInfo, history, err := m.user.GetInfo(ctx, user)
+	userInfo, history, err = m.user.GetInfo(ctx, id, username)
 	if err != nil {
 		ctx.Error("failed to get info user", err)
 		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
@@ -44,6 +49,7 @@ func (m *MerchHandlder) Info(ctx *utilapi.APIContext) {
 
 	resp := makeInfoResp(userInfo, history)
 
+	ctx.Info("successful get info", "user", username)
 	ctx.SuccessWithData(resp)
 }
 

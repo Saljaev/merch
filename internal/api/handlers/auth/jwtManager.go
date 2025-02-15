@@ -3,7 +3,6 @@ package auth
 import (
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
-	"merch/internal/entity"
 	"strconv"
 	"time"
 )
@@ -22,11 +21,11 @@ func NewJWTManager(s, i string, d time.Duration) *JWTManager {
 	}
 }
 
-func (m *JWTManager) Generate(user entity.User, customClaims map[string]string) (string, error) {
+func (m *JWTManager) Generate(username string, customClaims map[string]string) (string, error) {
 	now := time.Now()
 
 	claims := jwt.MapClaims{
-		"sub": user.UserName,
+		"sub": username,
 		"iss": m.issuer,
 		"exp": jwt.NewNumericDate(now.Add(m.tokenDuration)),
 		"iat": jwt.NewNumericDate(now),
@@ -85,7 +84,7 @@ func (m *JWTManager) parseToken(token string, withoutValidation bool) (jwt.MapCl
 	if err != nil || parsed == nil {
 		return nil, fmt.Errorf("failed to parse token: %v", err)
 	}
-	
+
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok || !parsed.Valid {
 		return nil, fmt.Errorf("invalid token claims")
