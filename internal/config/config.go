@@ -23,6 +23,7 @@ type Config struct {
 	TokenTTL    time.Duration
 	CacheTTL    time.Duration
 	SLI         time.Duration
+	SrvRead     time.Duration
 	ADDR        string
 }
 
@@ -54,6 +55,11 @@ func ConfigLoad() *Config {
 		panic(err)
 	}
 
+	srvRead, err := parseDuration(os.Getenv("READTIMEOUT"))
+	if err != nil {
+		panic(err)
+	}
+
 	addr := os.Getenv("ADDR")
 
 	cfg := &Config{
@@ -64,6 +70,7 @@ func ConfigLoad() *Config {
 		TokenTTL:    tokenTTL,
 		CacheTTL:    cacheTTL,
 		SLI:         sli,
+		SrvRead:     srvRead,
 		ADDR:        addr,
 	}
 

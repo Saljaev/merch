@@ -68,7 +68,7 @@ func Run() {
 	srv := &http.Server{
 		Addr:         cfg.ADDR,
 		Handler:      r,
-		ReadTimeout:  cfg.SLI,
+		ReadTimeout:  cfg.SrvRead,
 		WriteTimeout: cfg.SLI,
 	}
 
