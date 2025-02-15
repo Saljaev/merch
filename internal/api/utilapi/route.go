@@ -40,8 +40,6 @@ func (r *Router) Handle(pattern, method string, handlerFuncs ...HandlerFunc) {
 			for _, h := range handlerFuncs {
 				select {
 				case <-ctx.Done():
-					ctx.Error("context timeout", ErrTimeout)
-					ctx.WriteFailure(http.StatusInternalServerError, "internal error")
 					return
 				default:
 					h(ctx)
