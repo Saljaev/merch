@@ -5,23 +5,27 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-
-	//"github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
+
+	"log/slog"
 	"merch/internal/entity"
 	"merch/internal/usecase/storage"
+	"time"
 )
 
 var (
 	ErrNotEnoughCoins = errors.New("not enough coins")
 	ErrUserNotFound   = errors.New("user not found")
+	log               = slog.Default()
 )
 
 const BucketCount = 4
 
 type (
-	ShardMap map[int]*sql.DB
+	ShardMap map[int]*pgxpool.Pool
 )
 type PgRepo struct {
 	ShardMap ShardMap
@@ -44,69 +48,69 @@ func (p *PgRepo) Transfer(ctx context.Context, amount int, fromUser, toUser enti
 	toDB := p.ShardMap[shardTo]
 
 	if fromDB == toDB {
-		tx, err := fromDB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+		tx, err := fromDB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 		if err != nil {
 			return fmt.Errorf("%s - failed to start transaction: %w", op, err)
 		}
 
 		err = p.transferInSameShard(ctx, tx, amount, fromUser, toUser)
 		if err != nil {
-			_ = tx.Rollback()
+			_ = tx.Rollback(ctx)
 			return err
 		}
 
-		return tx.Commit()
+		return tx.Commit(ctx)
 	}
 
-	txFrom, err := fromDB.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	txFrom, err := fromDB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
 		return fmt.Errorf("%s - failed to BeginTx from_user: %w", op, err)
 	}
 
-	txTo, err := toDB.BeginTx(ctx, nil)
+	txTo, err := toDB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
-		_ = txFrom.Rollback()
+		_ = txFrom.Rollback(ctx)
 		return fmt.Errorf("%s - failed to BeginTx to_user: %w", op, err)
 	}
 
 	query := "UPDATE users SET coins = coins - $1 WHERE id = $2"
-	_, err = txFrom.ExecContext(ctx, query, amount, fromUserID)
+	_, err = txFrom.Exec(ctx, query, amount, fromUserID)
 	if err != nil {
-		_ = txFrom.Rollback()
-		_ = txTo.Rollback()
+		_ = txFrom.Rollback(ctx)
+		_ = txTo.Rollback(ctx)
 		return fmt.Errorf("%s - failed to update coins from_user: %w", op, err)
 	}
 
 	query = "UPDATE users SET coins = coins + $1 WHERE id = $2"
-	_, err = txTo.ExecContext(ctx, query, amount, toUserID)
+	_, err = txTo.Exec(ctx, query, amount, toUserID)
 	if err != nil {
-		_ = txFrom.Rollback()
-		_ = txTo.Rollback()
+		_ = txFrom.Rollback(ctx)
+		_ = txTo.Rollback(ctx)
 		return fmt.Errorf("%s - failed to update coins to_user: %w", op, err)
 	}
 
 	query = "INSERT INTO coin_history (from_user, to_user, amount) VALUES ($1, $2, $3)"
-	_, err = txFrom.ExecContext(ctx, query, fromUserName, toUserName, amount)
+	_, err = txFrom.Exec(ctx, query, fromUserName, toUserName, amount)
 	if err != nil {
-		_ = txFrom.Rollback()
-		_ = txTo.Rollback()
+		_ = txFrom.Rollback(ctx)
+		_ = txTo.Rollback(ctx)
 		return fmt.Errorf("%s - failed to insert in coin_history from_user: %w", op, err)
 	}
 
 	query = "INSERT INTO coin_history (from_user, to_user, amount) VALUES ($1, $2, $3)"
-	_, err = txTo.ExecContext(ctx, query, fromUserName, toUserName, amount)
+	_, err = txTo.Exec(ctx, query, fromUserName, toUserName, amount)
 	if err != nil {
-		_ = txFrom.Rollback()
-		_ = txTo.Rollback()
+		_ = txFrom.Rollback(ctx)
+		_ = txTo.Rollback(ctx)
 		return fmt.Errorf("%s - failed to insert in coin_history to_user: %w", op, err)
 	}
 
-	if err = txFrom.Commit(); err != nil {
-		_ = txTo.Rollback()
+	if err = txFrom.Commit(ctx); err != nil {
+		_ = txTo.Rollback(ctx)
 		return err
 	}
 
-	if err = txTo.Commit(); err != nil {
+	if err = txTo.Commit(ctx); err != nil {
 		return err
 	}
 
@@ -119,7 +123,7 @@ func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity
 
 		query := "SELECT id, username, password, coins FROM users WHERE username = $1"
 
-		err := db.QueryRowContext(ctx, query, username).Scan(&user.ID, &user.UserName, &user.Password, &user.Coins)
+		err := db.QueryRow(ctx, query, username).Scan(&user.ID, &user.UserName, &user.Password, &user.Coins)
 		if err == nil {
 			return user, nil
 		}
@@ -131,7 +135,7 @@ func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity
 	return entity.User{}, ErrUserNotFound
 }
 
-func (p *PgRepo) transferInSameShard(ctx context.Context, tx *sql.Tx, amount int, fromUser, toUser entity.User) error {
+func (p *PgRepo) transferInSameShard(ctx context.Context, tx pgx.Tx, amount int, fromUser, toUser entity.User) error {
 	const op = "PgRepo - transferInSameShard"
 
 	fromUserID := int(fromUser.ID)
@@ -143,7 +147,7 @@ func (p *PgRepo) transferInSameShard(ctx context.Context, tx *sql.Tx, amount int
 	query := "UPDATE users SET coins = coins - $1 " +
 		"WHERE id = $2"
 
-	_, err := tx.ExecContext(ctx, query, amount, fromUserID)
+	_, err := tx.Exec(ctx, query, amount, fromUserID)
 	if err != nil {
 		return fmt.Errorf("%s - failed to update coins on from_user: %w", op, err)
 	}
@@ -151,14 +155,14 @@ func (p *PgRepo) transferInSameShard(ctx context.Context, tx *sql.Tx, amount int
 	query = "UPDATE users SET coins = coins + $1 " +
 		"WHERE id = $2"
 
-	_, err = tx.ExecContext(ctx, query, amount, toUserID)
+	_, err = tx.Exec(ctx, query, amount, toUserID)
 	if err != nil {
 		return fmt.Errorf("%s - failed to update coins on to_user: %w", op, err)
 	}
 
 	query = "INSERT INTO coin_history (from_user, to_user, amount) " +
 		"VALUES ($1, $2, $3)"
-	_, err = tx.ExecContext(ctx, query, fromUserName, toUserName, amount)
+	_, err = tx.Exec(ctx, query, fromUserName, toUserName, amount)
 	if err != nil {
 		return fmt.Errorf("%s - failed to insert in coin_history: %w", op, err)
 	}
@@ -168,21 +172,18 @@ func (p *PgRepo) transferInSameShard(ctx context.Context, tx *sql.Tx, amount int
 
 func (p *PgRepo) AddUser(ctx context.Context, user entity.User) (int, error) {
 	query := "INSERT INTO users(id, username, password, coins) " +
-		"VALUES ($1, $2, $3, $4) " +
-		"RETURNING id"
+		"VALUES ($1, $2, $3, $4)"
 
 	shardNumber := p.getShardID(int(user.ID))
 
 	db := p.ShardMap[shardNumber]
 
-	var userID int
-
-	err := db.QueryRowContext(ctx, query, user.ID, user.UserName, user.Password, user.Coins).Scan(&userID)
-	if err != nil || userID != int(user.ID) {
+	_, err := db.Exec(ctx, query, user.ID, user.UserName, user.Password, user.Coins)
+	if err != nil {
 		return 0, fmt.Errorf("failed to add user: %w", err)
 	}
 
-	return userID, nil
+	return int(user.ID), nil
 }
 
 func (p *PgRepo) Purchase(ctx context.Context, user entity.User, value int, item string) error {
@@ -196,7 +197,7 @@ func (p *PgRepo) Purchase(ctx context.Context, user entity.User, value int, item
 
 	db := p.ShardMap[shardNumber]
 
-	err := db.QueryRowContext(ctx, query, userID).Scan(&coins)
+	err := db.QueryRow(ctx, query, userID).Scan(&coins)
 	if err != nil {
 		return fmt.Errorf("failed to get user coins: %w", err)
 	}
@@ -204,18 +205,18 @@ func (p *PgRepo) Purchase(ctx context.Context, user entity.User, value int, item
 	newCoins := coins - value
 
 	if newCoins >= 0 {
-		tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+		tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 		if err != nil {
 			return fmt.Errorf("failed to start transaction: %w", err)
 		}
 
-		defer tx.Rollback()
+		defer tx.Rollback(ctx)
 
 		query = "UPDATE users SET " +
 			"coins = $1 " +
 			"WHERE id = $2"
 
-		_, err = tx.ExecContext(ctx, query, newCoins, userID)
+		_, err = tx.Exec(ctx, query, newCoins, userID)
 		if err != nil {
 			return fmt.Errorf("failed to update user coins: %w", err)
 		}
@@ -225,12 +226,12 @@ func (p *PgRepo) Purchase(ctx context.Context, user entity.User, value int, item
 			"ON CONFLICT (user_id, item) " +
 			"DO UPDATE SET quantity = inventory.quantity + 1"
 
-		_, err = tx.ExecContext(ctx, query, userID, item)
+		_, err = tx.Exec(ctx, query, userID, item)
 		if err != nil {
 			return fmt.Errorf("failed to update user inventory: %w", err)
 		}
 
-		err = tx.Commit()
+		err = tx.Commit(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to commit transaction: %w", err)
 		}
@@ -252,7 +253,7 @@ func (p *PgRepo) GetInfo(ctx context.Context, user entity.User) (entity.User, []
 
 	var coins int
 
-	err := db.QueryRowContext(ctx, query, userID).Scan(&coins)
+	err := db.QueryRow(ctx, query, userID).Scan(&coins)
 	if err != nil {
 		return entity.User{}, nil, fmt.Errorf("failed to get user coins: %w", err)
 	}
@@ -262,7 +263,7 @@ func (p *PgRepo) GetInfo(ctx context.Context, user entity.User) (entity.User, []
 		"LEFT JOIN inventory inv on users.id = inv.user_id " +
 		"WHERE users.id = $1"
 
-	rowsInv, err := db.QueryContext(ctx, query, userID)
+	rowsInv, err := db.Query(ctx, query, userID)
 	defer rowsInv.Close()
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -285,7 +286,7 @@ func (p *PgRepo) GetInfo(ctx context.Context, user entity.User) (entity.User, []
 		"FROM coin_history " +
 		"WHERE to_user = $1"
 
-	rowsCoins, err := db.QueryContext(ctx, query, user.UserName)
+	rowsCoins, err := db.Query(ctx, query, user.UserName)
 	defer rowsCoins.Close()
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -333,22 +334,33 @@ func initShardMap(dsns map[int]string) ShardMap {
 // TODO: change to migrations
 // TODO: add index on users(username)
 func (p *PgRepo) InitEntity(shardNum int) error {
-	query := "CREATE TABLE IF NOT EXISTS users (id BIGINT PRIMARY KEY,username TEXT UNIQUE NOT NULL, password TEXT NOT NULL, coins INT)"
+	query := "CREATE TABLE IF NOT EXISTS users (" +
+		"id BIGINT PRIMARY KEY, " +
+		"username TEXT UNIQUE NOT NULL, " +
+		"password TEXT NOT NULL, " +
+		"coins INT)"
 
-	rows, err := p.ShardMap[shardNum].Query(query)
+	rows, err := p.ShardMap[shardNum].Query(context.Background(), query)
 	if err != nil {
 		return fmt.Errorf("failed to migrate users :%w", err)
 	}
+	//CREATE INDEX ON users (id); -- Для шардирования
+	query = "CREATE UNIQUE INDEX users_username_idx ON users (username);\n"
+	rows, err = p.ShardMap[shardNum].Query(context.Background(), query)
+	if err != nil {
+		return fmt.Errorf("failed to create users index:%w", err)
+	}
+
 	query = "CREATE TABLE IF NOT EXISTS inventory (id BIGSERIAL PRIMARY KEY, user_id BIGINT REFERENCES users(id), item TEXT NOT NULL, quantity INT)"
 
-	rows, err = p.ShardMap[shardNum].Query(query)
+	rows, err = p.ShardMap[shardNum].Query(context.Background(), query)
 	if err != nil {
 		return fmt.Errorf("failed to migrate inventory :%w", err)
 	}
 
 	query = "ALTER TABLE inventory ADD CONSTRAINT inventory_unique_user_item UNIQUE (user_id, item)"
 
-	rows, err = p.ShardMap[shardNum].Query(query)
+	rows, err = p.ShardMap[shardNum].Query(context.Background(), query)
 	if err != nil {
 		return fmt.Errorf("failed to migrate inventory :%w", err)
 	}
@@ -359,7 +371,7 @@ func (p *PgRepo) InitEntity(shardNum int) error {
 		"amount INT NOT NULL, " +
 		"created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW())"
 
-	rows, err = p.ShardMap[shardNum].Query(query)
+	rows, err = p.ShardMap[shardNum].Query(context.Background(), query)
 	if err != nil {
 		return fmt.Errorf("failed to migrate coin_history :%w", err)
 	}
@@ -368,16 +380,27 @@ func (p *PgRepo) InitEntity(shardNum int) error {
 	return nil
 }
 
-func discoveryShard(dsn string) *sql.DB {
-	db, err := sql.Open("postgres", dsn)
+func discoveryShard(dsn string) *pgxpool.Pool {
+	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		panic(err)
+		log.Error("failed to parse config", slog.Any("error", err))
 	}
-	err = db.Ping()
+
+	config.MaxConns = 100
+	config.MinConns = 10
+	config.MaxConnLifetime = 5 * time.Minute
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
 	if err != nil {
-		panic(err)
+		log.Error("failed new pgxpool with config", slog.Any("error", err))
 	}
-	return db
+
+	err = pool.Ping(context.Background())
+	if err != nil {
+		log.Error("failed ping shard", slog.Any("error", err))
+	}
+
+	return pool
 }
 
 func (p *PgRepo) getShardID(ID int) int {
@@ -385,7 +408,7 @@ func (p *PgRepo) getShardID(ID int) int {
 }
 
 func (p *PgRepo) CloseDB() {
-	for _, db := range p.ShardMap {
-		_ = db.Close()
+	for _, pool := range p.ShardMap {
+		pool.Close()
 	}
 }
