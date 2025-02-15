@@ -1,10 +1,10 @@
-package shoprepo
+package shop
 
 import (
 	_ "embed"
 	"errors"
 	"log"
-	"merch/internal/usecase/shop"
+	"merch/internal/usecase/usecase"
 	"strconv"
 	"strings"
 )
@@ -13,24 +13,16 @@ type MapStore struct {
 	store map[string]int
 }
 
-var _ shop.ShopRepo = (*MapStore)(nil)
+var _ usecase.ShopRepo = (*MapStore)(nil)
 
-func (m *MapStore) Buy(userCoin int, name string) (int, error) {
+func (m *MapStore) GetCost(name string) (int, error) {
 	v, ok := m.store[name]
 	if !ok {
-		return 0, ErrNoItem
-	}
-	if userCoin < v {
-		return 0, ErrNotEnoughCoin
+		return 0, errors.Join(usecase.ErrNoItem)
 	}
 
 	return v, nil
 }
-
-var (
-	ErrNoItem        = errors.New("no such item")
-	ErrNotEnoughCoin = errors.New("no enough coin to buy item")
-)
 
 //go:embed store.txt
 var itemList string
