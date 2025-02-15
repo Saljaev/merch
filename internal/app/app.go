@@ -10,10 +10,9 @@ import (
 	"merch/internal/cache"
 	"merch/internal/config"
 	"merch/internal/entity"
-	"merch/internal/usecase/shop"
-	shoprepo "merch/internal/usecase/shop/repo"
-	"merch/internal/usecase/storage"
-	"merch/internal/usecase/storage/repo/postgres"
+	"merch/internal/usecase/usecase"
+	"merch/internal/usecase/usecase/repo/postgres"
+	shoprepo "merch/internal/usecase/usecase/repo/shop"
 	"net/http"
 	"os"
 	"os/signal"
@@ -33,7 +32,7 @@ func Run() {
 
 	log.Info("starting server")
 
-	repo := postgres.NewRepo(sharMap)
+	repo := postgres.NewRepo(sharMap, cfg.MaxConn, cfg.MinConn, cfg.LifeConn)
 	defer repo.CloseDB()
 
 	for i := range cfg.ShardNumber {
@@ -46,18 +45,17 @@ func Run() {
 	// For generate UserID type int
 	entity.InitSonyflake()
 
-	merchUseCase := storage.NewStorage(repo)
-
 	log.Info("successful connected to db")
 
 	mapStore := shoprepo.NewMapStore()
-	itemShop := shop.NewShop(mapStore)
 
 	c := cache.NewCache[string](cfg.CacheTTL)
 
+	merchUseCase := usecase.NewStorage(repo, c, mapStore)
+
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.Issuer, cfg.TokenTTL)
 
-	handler := merch.NewMerchHandler(merchUseCase, c, itemShop, jwtManager)
+	handler := merch.NewMerchHandler(merchUseCase, jwtManager)
 
 	r := utilapi.NewRouter(log, cfg.SLI)
 	r.Handle("/api/sendCoin", http.MethodPost, handler.TokenMiddleware, handler.SendCoin)
@@ -68,8 +66,8 @@ func Run() {
 	srv := &http.Server{
 		Addr:         cfg.ADDR,
 		Handler:      r,
-		ReadTimeout:  cfg.SrvRead,
-		WriteTimeout: cfg.SLI,
+		ReadTimeout:  cfg.SLI * 10,
+		WriteTimeout: cfg.SLI * 10,
 	}
 
 	go func() {
