@@ -118,6 +118,8 @@ func (p *PgRepo) Transfer(ctx context.Context, amount int, fromUser, toUser enti
 }
 
 func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity.User, error) {
+	const op = "PgRepo - GetUserByUsername"
+
 	for _, db := range p.ShardMap {
 		var user entity.User
 
@@ -128,11 +130,11 @@ func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity
 			return user, nil
 		}
 		if err != sql.ErrNoRows {
-			return entity.User{}, err
+			return entity.User{}, fmt.Errorf("%s - db.QueryRow: %w", op, err)
 		}
 	}
 
-	return entity.User{}, ErrUserNotFound
+	return entity.User{}, fmt.Errorf("%s - %w", op, ErrUserNotFound)
 }
 
 func (p *PgRepo) transferInSameShard(ctx context.Context, tx pgx.Tx, amount int, fromUser, toUser entity.User) error {
@@ -171,6 +173,8 @@ func (p *PgRepo) transferInSameShard(ctx context.Context, tx pgx.Tx, amount int,
 }
 
 func (p *PgRepo) AddUser(ctx context.Context, user entity.User) (int, error) {
+	const op = "PgRepo - AddUser"
+
 	query := "INSERT INTO users(id, username, password, coins) " +
 		"VALUES ($1, $2, $3, $4)"
 
@@ -180,13 +184,15 @@ func (p *PgRepo) AddUser(ctx context.Context, user entity.User) (int, error) {
 
 	_, err := db.Exec(ctx, query, user.ID, user.UserName, user.Password, user.Coins)
 	if err != nil {
-		return 0, fmt.Errorf("failed to add user: %w", err)
+		return 0, fmt.Errorf("%s - failed to add user: %w", op, err)
 	}
 
 	return int(user.ID), nil
 }
 
 func (p *PgRepo) Purchase(ctx context.Context, user entity.User, value int, item string) error {
+	const op = "PgRepo - Purchase"
+
 	query := "SELECT coins FROM users WHERE id = $1"
 
 	userID := int(user.ID)
@@ -199,7 +205,7 @@ func (p *PgRepo) Purchase(ctx context.Context, user entity.User, value int, item
 
 	err := db.QueryRow(ctx, query, userID).Scan(&coins)
 	if err != nil {
-		return fmt.Errorf("failed to get user coins: %w", err)
+		return fmt.Errorf("%s - failed to get user coins: %w", op, err)
 	}
 
 	newCoins := coins - value
@@ -207,7 +213,7 @@ func (p *PgRepo) Purchase(ctx context.Context, user entity.User, value int, item
 	if newCoins >= 0 {
 		tx, err := db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 		if err != nil {
-			return fmt.Errorf("failed to start transaction: %w", err)
+			return fmt.Errorf("%s - failed to start transaction: %w", op, err)
 		}
 
 		defer tx.Rollback(ctx)
@@ -218,7 +224,7 @@ func (p *PgRepo) Purchase(ctx context.Context, user entity.User, value int, item
 
 		_, err = tx.Exec(ctx, query, newCoins, userID)
 		if err != nil {
-			return fmt.Errorf("failed to update user coins: %w", err)
+			return fmt.Errorf("%s - failed to update user coins: %w", op, err)
 		}
 
 		query = "INSERT INTO inventory (user_id, item, quantity) " +
@@ -228,21 +234,23 @@ func (p *PgRepo) Purchase(ctx context.Context, user entity.User, value int, item
 
 		_, err = tx.Exec(ctx, query, userID, item)
 		if err != nil {
-			return fmt.Errorf("failed to update user inventory: %w", err)
+			return fmt.Errorf("%s - failed to update user inventory: %w", op, err)
 		}
 
 		err = tx.Commit(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to commit transaction: %w", err)
+			return fmt.Errorf("%s - failed to commit transaction: %w", op, err)
 		}
 	} else {
-		return fmt.Errorf("failed to purchase item: %w", ErrNotEnoughCoins)
+		return fmt.Errorf("%s - failed to purchase item: %w", op, ErrNotEnoughCoins)
 	}
 
 	return nil
 }
 
 func (p *PgRepo) GetInfo(ctx context.Context, user entity.User) (entity.User, []entity.CoinHistory, error) {
+	const op = "PgRepo - GetInfo"
+
 	query := "SELECT coins FROM users WHERE users.id = $1"
 
 	userID := int(user.ID)
@@ -255,7 +263,7 @@ func (p *PgRepo) GetInfo(ctx context.Context, user entity.User) (entity.User, []
 
 	err := db.QueryRow(ctx, query, userID).Scan(&coins)
 	if err != nil {
-		return entity.User{}, nil, fmt.Errorf("failed to get user coins: %w", err)
+		return entity.User{}, nil, fmt.Errorf("%s - failed to get user coins: %w", op, err)
 	}
 
 	query = "SELECT inv.item AS inventory_item, inv.quantity AS inventory_quantity " +
@@ -267,7 +275,7 @@ func (p *PgRepo) GetInfo(ctx context.Context, user entity.User) (entity.User, []
 	defer rowsInv.Close()
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return entity.User{}, nil, fmt.Errorf("failed to get user inventory: %w", err)
+		return entity.User{}, nil, fmt.Errorf("%s - failed to get user inventory: %w", op, err)
 	}
 
 	var inventory []entity.Inventory
@@ -290,7 +298,7 @@ func (p *PgRepo) GetInfo(ctx context.Context, user entity.User) (entity.User, []
 	defer rowsCoins.Close()
 
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return entity.User{}, nil, fmt.Errorf("failed to get user history: %w", err)
+		return entity.User{}, nil, fmt.Errorf("%s - failed to get user history: %w", op, err)
 	}
 
 	var coinsHistory []entity.CoinHistory
