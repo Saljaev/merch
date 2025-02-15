@@ -1,10 +1,11 @@
 package entity
 
 import (
+	"crypto/md5"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"github.com/sony/sonyflake"
-	"golang.org/x/crypto/bcrypt"
 	"log/slog"
 	"math/big"
 )
@@ -43,11 +44,8 @@ type CoinHistory struct {
 }
 
 func NewUser(username, password string) (User, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
-	if err != nil {
-		return User{}, fmt.Errorf("failed to hash password: %w", err)
-	}
-	
+	hashedPassword := HashPassword(password)
+
 	t, _ := rand.Int(rand.Reader, big.NewInt(100000000))
 	userID, err := sf.NextID()
 	if err != nil {
@@ -58,12 +56,16 @@ func NewUser(username, password string) (User, error) {
 		ID:        int64(userID) + t.Int64(),
 		Coins:     DefaultCoins,
 		UserName:  username,
-		Password:  string(hashedPassword),
+		Password:  hashedPassword,
 		Inventory: []Inventory{},
 	}, nil
 }
 
+func HashPassword(password string) string {
+	hash := md5.Sum([]byte(password))
+	return hex.EncodeToString(hash[:])
+}
+
 func (u *User) Identification(password string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
-	return err == nil
+	return HashPassword(password) == u.Password
 }

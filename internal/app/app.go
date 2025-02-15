@@ -3,10 +3,8 @@ package app
 import (
 	"context"
 	_ "embed"
-	"merch/internal/api/handlers/auth"
-	"merch/internal/usecase/storage"
-
 	"log/slog"
+	"merch/internal/api/handlers/auth"
 	"merch/internal/api/handlers/merch"
 	"merch/internal/api/utilapi"
 	"merch/internal/cache"
@@ -14,11 +12,11 @@ import (
 	"merch/internal/entity"
 	"merch/internal/usecase/shop"
 	shoprepo "merch/internal/usecase/shop/repo"
+	"merch/internal/usecase/storage"
 	"merch/internal/usecase/storage/repo/postgres"
 	"net/http"
 	"os"
 	"os/signal"
-
 	"syscall"
 	"time"
 )
