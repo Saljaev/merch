@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"merch/internal/entity"
 	"merch/internal/usecase/mocks"
@@ -22,9 +23,9 @@ func TestNewStorage(t *testing.T) {
 		shop ShopRepo
 	}
 	tests := []struct {
-		name string
-		args args
 		want *UseCase
+		args args
+		name string
 	}{
 		{
 			name: "Valid test",
@@ -73,7 +74,8 @@ func TestUseCase_AddUser(t *testing.T) {
 	}
 
 	uPass := "1234"
-	user, _ := entity.NewUser("testuser", uPass)
+	user, err := entity.NewUser("testuser", uPass)
+	assert.NoError(t, err)
 
 	type args struct {
 		ctx      context.Context
@@ -191,8 +193,8 @@ func TestUseCase_GetInfo(t *testing.T) {
 	}
 
 	type args struct {
-		ctx      context.Context
 		id       int
+		ctx      context.Context
 		username string
 	}
 	tests := []struct {
@@ -354,7 +356,8 @@ func TestUseCase_Purchase(t *testing.T) {
 			mockSetup: func() {
 				mockShop.On("GetCost", mock.Anything).Return(shopMap[validItem], nil).Once()
 				mockCache.On("Get", mock.Anything).Return(testUser, true).Once()
-				mockRepo.On("Purchase", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+				mockRepo.On("Purchase", mock.Anything, mock.Anything,
+					mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				mockCache.On("Set", mock.Anything, mock.Anything).Once()
 			},
 			useCase: testUseCase,
@@ -373,7 +376,8 @@ func TestUseCase_Purchase(t *testing.T) {
 				mockCache.On("Get", mock.Anything).Return(nil, false).Once()
 				mockRepo.On("GetUserByID", mock.Anything, mock.Anything).Return(testUser, nil).Once()
 				mockCache.On("Set", mock.Anything, mock.Anything).Once()
-				mockRepo.On("Purchase", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+				mockRepo.On("Purchase", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+					mock.Anything).Return(nil).Once()
 				mockCache.On("Set", mock.Anything, mock.Anything).Once()
 			},
 			useCase: testUseCase,
@@ -435,7 +439,8 @@ func TestUseCase_Purchase(t *testing.T) {
 			mockSetup: func() {
 				mockShop.On("GetCost", mock.Anything).Return(shopMap[validItem], nil).Once()
 				mockCache.On("Get", mock.Anything).Return(testUser, true).Once()
-				mockRepo.On("Purchase", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("failed to buy")).Once()
+				mockRepo.On("Purchase", mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+					mock.Anything).Return(errors.New("failed to buy")).Once()
 			},
 			useCase: testUseCase,
 			args: args{
@@ -486,11 +491,13 @@ func TestUseCase_Transfer(t *testing.T) {
 	}
 
 	type args struct {
-		ctx          context.Context
-		amount       int
-		fromID       int
+		amount int
+		fromID int
+
 		fromUsername string
 		toUsername   string
+
+		ctx context.Context
 	}
 	tests := []struct {
 		name      string
@@ -610,7 +617,8 @@ func TestUseCase_Transfer(t *testing.T) {
 			mockSetup: func() {
 				mockCache.On("Get", mock.Anything).Return(toUser, true).Once()
 				mockCache.On("Get", mock.Anything).Return(fromUser, true).Once()
-				mockRepo.On("Transfer", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("some error from Tx")).Once()
+				mockRepo.On("Transfer", mock.Anything, mock.Anything, mock.Anything,
+					mock.Anything).Return(errors.New("some error from Tx")).Once()
 			},
 			useCase: testUseCase,
 			args: args{
@@ -632,7 +640,8 @@ func TestUseCase_Transfer(t *testing.T) {
 				cache: tt.useCase.cache,
 			}
 
-			if err := u.Transfer(tt.args.ctx, tt.args.amount, tt.args.fromID, tt.args.fromUsername, tt.args.toUsername); (err != nil) != tt.wantErr {
+			if err := u.Transfer(tt.args.ctx, tt.args.amount, tt.args.fromID, tt.args.fromUsername,
+				tt.args.toUsername); (err != nil) != tt.wantErr {
 				t.Errorf("Transfer() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})

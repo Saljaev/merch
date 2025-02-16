@@ -42,7 +42,10 @@ func (u *UseCase) AddUser(ctx context.Context, username, password string) (int, 
 		}
 		u.cache.Set(username, user)
 	} else {
-		user = cacheUser.(entity.User)
+		user, ok = cacheUser.(entity.User)
+		if !ok {
+			return 0, fmt.Errorf("%s - cacheUser is not entity.User", op)
+		}
 		if !user.Identification(password) {
 			return 0, fmt.Errorf("%s - failed to identification user: %w", op, ErrNotAuthorization)
 		}
@@ -73,7 +76,10 @@ func (u *UseCase) Purchase(ctx context.Context, id int, username, item string) e
 		}
 		u.cache.Set(username, user)
 	} else {
-		user = cacheUser.(entity.User)
+		user, ok = cacheUser.(entity.User)
+		if !ok {
+			return fmt.Errorf("%s - cacheUser is not entity.User", op)
+		}
 	}
 
 	if user.Coins < cost {
@@ -122,7 +128,10 @@ func (u *UseCase) GetInfo(ctx context.Context, id int, username string) (entity.
 		}
 		u.cache.Set(username, user)
 	} else {
-		user = cacheUser.(entity.User)
+		user, ok = cacheUser.(entity.User)
+		if !ok {
+			return entity.User{}, nil, fmt.Errorf("%s - cacheUser is not entity.User", op)
+		}
 		history, err = u.repo.GetTransaction(ctx, id)
 		if err != nil {
 			return entity.User{}, nil, fmt.Errorf("%s - failed to get user transactions: %w", op, err)
@@ -150,7 +159,10 @@ func (u *UseCase) Transfer(ctx context.Context, amount, fromID int, fromUsername
 		}
 		u.cache.Set(toUsername, toUser)
 	} else {
-		toUser = cacheToUser.(entity.User)
+		toUser, ok = cacheToUser.(entity.User)
+		if !ok {
+			return fmt.Errorf("%s - cacheUser is not entity.User", op)
+		}
 	}
 
 	var fromUser entity.User
@@ -163,7 +175,10 @@ func (u *UseCase) Transfer(ctx context.Context, amount, fromID int, fromUsername
 		}
 		u.cache.Set(fromUsername, fromUser)
 	} else {
-		fromUser = cacheFromUser.(entity.User)
+		fromUser, ok = cacheFromUser.(entity.User)
+		if !ok {
+			return fmt.Errorf("%s - cacheUser is not entity.User", op)
+		}
 		if fromUser.Coins < amount {
 			return fmt.Errorf("%s - failed to transfer coin: %w", op, ErrNotEnoughCoin)
 		}
