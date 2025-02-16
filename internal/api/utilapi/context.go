@@ -23,7 +23,7 @@ type APIContext struct {
 }
 
 func newAPIContext(w http.ResponseWriter, req *http.Request, log *slog.Logger, sli time.Duration) *APIContext {
-	ctx, cancel := context.WithTimeout(req.Context(), sli)
+	ctx, cancel := context.WithTimeout(req.Context(), sli*10)
 	r := req.WithContext(ctx)
 
 	return &APIContext{
