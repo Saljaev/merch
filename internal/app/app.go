@@ -64,7 +64,10 @@ func Run() {
 	}
 
 	go func() {
-		srv.ListenAndServe()
+		err := srv.ListenAndServe()
+		if err != nil {
+			log.Error("failed to listen and server", slog.Any("error", err))
+		}
 	}()
 
 	done := make(chan os.Signal, 1)
@@ -87,9 +90,7 @@ func Run() {
 }
 
 func setupLogger() *slog.Logger {
-	var log *slog.Logger
-
-	log = slog.New(
+	log := slog.New(
 		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
 	)
 
