@@ -188,9 +188,13 @@ func (p *PgRepo) GetUserByID(ctx context.Context, ID int) (entity.User, error) {
 		if err == nil {
 			return user, nil
 		}
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		return entity.User{}, fmt.Errorf("%s - failed to get user by ID: %w", op, err)
 	}
 
-	return entity.User{}, fmt.Errorf("%s - %w", op, usecase.ErrUserNotFound)
+	return entity.User{}, fmt.Errorf("%s - failed to get user by ID: %w", op, usecase.ErrUserNotFound)
 }
 
 func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity.User, error) {
@@ -206,11 +210,12 @@ func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity
 			return user, nil
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			return entity.User{}, fmt.Errorf("%s - db.QueryRow: %w", op, usecase.ErrUserNotFound)
+			continue
 		}
+		return entity.User{}, fmt.Errorf("%s - failed to get user by ID: %w", op, err)
 	}
 
-	return entity.User{}, fmt.Errorf("%s - %w", op, usecase.ErrUserNotFound)
+	return entity.User{}, fmt.Errorf("%s - failed to get user by ID: %w", op, usecase.ErrUserNotFound)
 }
 
 func (p *PgRepo) transferInSameShard(ctx context.Context, tx pgx.Tx, amount int, fromUser, toUser entity.User) error {
@@ -222,12 +227,15 @@ func (p *PgRepo) transferInSameShard(ctx context.Context, tx pgx.Tx, amount int,
 	fromUserName := fromUser.UserName
 	toUserName := toUser.UserName
 
-	query := "UPDATE users SET coins = coins - $1 " +
-		"WHERE id = $2"
-
-	_, err := tx.Exec(ctx, query, amount, fromUserID)
+	query := "UPDATE users SET coins = coins - $1 WHERE id = $2 AND coins >= $1"
+	row, err := tx.Exec(ctx, query, amount, fromUserID)
 	if err != nil {
-		return fmt.Errorf("%s - failed to update coins on from_user: %w", op, err)
+		_ = tx.Rollback(ctx)
+		return fmt.Errorf("%s - failed to update coins from_user: %w", op, err)
+	}
+	if row.RowsAffected() == 0 {
+		_ = tx.Rollback(ctx)
+		return fmt.Errorf("%s - %w", op, usecase.ErrNotEnoughCoin)
 	}
 
 	query = "UPDATE users SET coins = coins + $1 " +
@@ -238,9 +246,8 @@ func (p *PgRepo) transferInSameShard(ctx context.Context, tx pgx.Tx, amount int,
 		return fmt.Errorf("%s - failed to update coins on to_user: %w", op, err)
 	}
 
-	query = "INSERT INTO coin_history (from_user, to_user, amount) " +
-		"VALUES ($1, $2, $3)"
-	_, err = tx.Exec(ctx, query, fromUserName, toUserName, amount)
+	query = "INSERT INTO coin_history (from_user, from_user_id, to_user, to_user_id, amount) VALUES ($1, $2, $3, $4, $5)"
+	_, err = tx.Exec(ctx, query, fromUserName, fromUserID, toUserName, toUserID, amount)
 	if err != nil {
 		return fmt.Errorf("%s - failed to insert in coin_history: %w", op, err)
 	}
