@@ -8,9 +8,9 @@ import (
 // Cache is generics map of Item, with ttl to delete and auto increment
 // tll of item, which is touched
 type Cache[T comparable] struct {
+	items map[T]*Item
 	mutex sync.RWMutex
 	ttl   time.Duration
-	items map[T]*Item
 }
 
 func (cache *Cache[T]) Set(key T, data any) {
@@ -63,14 +63,11 @@ func (cache *Cache[T]) startCleanupTimer() {
 	}
 
 	ticker := time.Tick(duration)
-	go (func() {
-		for {
-			select {
-			case <-ticker:
-				cache.cleanup()
-			}
+	go func() {
+		for range ticker {
+			cache.cleanup()
 		}
-	})()
+	}()
 }
 
 func NewCache[T comparable](duration time.Duration) *Cache[T] {
@@ -80,6 +77,6 @@ func NewCache[T comparable](duration time.Duration) *Cache[T] {
 	}
 
 	cache.startCleanupTimer()
-	
+
 	return cache
 }

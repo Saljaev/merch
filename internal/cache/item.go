@@ -7,9 +7,9 @@ import (
 
 // Item is a record of type any in Cache
 type Item struct {
-	sync.RWMutex
-	data    any
 	expires *time.Time
+	data    any
+	sync.RWMutex
 }
 
 func (item *Item) touch(duration time.Duration) {
