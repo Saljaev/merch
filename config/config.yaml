@@ -1,0 +1,8 @@
+#Postgres
+max_conn: 100
+min_conn: 10
+life_conn: 5m
+shard_number: 4
+  
+#Backend
+sli: 0.05s

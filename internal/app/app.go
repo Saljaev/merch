@@ -32,7 +32,7 @@ func Run() {
 
 	log.Info("starting server")
 
-	repo := postgres.NewRepo(sharMap, cfg.MaxConn, cfg.MinConn, cfg.LifeConn)
+	repo := postgres.NewRepo(sharMap, cfg.MaxConn, cfg.MinConn, cfg.ShardNumber, cfg.LifeConn)
 	defer repo.CloseDB()
 
 	// For generate UserID type int

@@ -14,7 +14,7 @@ RUN go build -o backend ./cmd/backend/main.go
 FROM scratch
 
 COPY --from=builder /go/src/backend/backend backend
-COPY --from=builder /go/src/backend/internal/migrations/ /migrations
+COPY --from=builder /go/src/backend/config/config.yaml ./
 COPY --from=builder /go/src/backend/.env ./
 
 EXPOSE 8080

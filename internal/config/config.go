@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 	"os"
 	"strconv"
 	"time"
@@ -17,16 +18,16 @@ type DataBase struct {
 
 type Config struct {
 	DBPath      []string
-	ShardNumber int
+	ShardNumber int `yaml:"shard_number"`
 	JWTSecret   string
 	Issuer      string
 	TokenTTL    time.Duration
 	CacheTTL    time.Duration
-	SLI         time.Duration
+	SLI         time.Duration `yaml:"sli"`
 	ADDR        string
-	MaxConn     int
-	MinConn     int
-	LifeConn    time.Duration
+	MaxConn     int           `yaml:"max_conn"`
+	MinConn     int           `yaml:"min_conn"`
+	LifeConn    time.Duration `yaml:"life_conn"`
 }
 
 func ConfigLoad() *Config {
@@ -35,55 +36,42 @@ func ConfigLoad() *Config {
 		panic(err)
 	}
 
+	var cfg Config
+
+	readConfigYaml(&cfg)
+
 	shardCount, _ := strconv.Atoi(os.Getenv("SHARD_COUNT"))
 	user := os.Getenv("POSTGRES_USER")
 	pass := os.Getenv("POSTGRES_PASSWORD")
 	db := os.Getenv("DB")
-	maxConn, _ := strconv.Atoi(os.Getenv("MAX_CONN"))
-	minConn, _ := strconv.Atoi(os.Getenv("MIN_CONN"))
-	lifeConn, err := parseDuration(os.Getenv("LIFE_CONN"))
-	if err != nil {
-		panic(err)
-	}
-
 	secret := os.Getenv("SECRET")
 	issuer := os.Getenv("ISSUER")
-	tokenTTL, err := parseDuration(os.Getenv("TOKEN_TTL"))
+	token_ttl, err := parseDuration(os.Getenv("TOKEN_TTL"))
 	if err != nil {
 		panic(err)
 	}
-
-	cacheTTL, err := parseDuration(os.Getenv("CACHE_TTL"))
-	if err != nil {
-		panic(err)
-	}
-	sli, err := parseDuration(os.Getenv("SLI"))
+	cache_ttl, err := parseDuration(os.Getenv("CACHE_TTL"))
 	if err != nil {
 		panic(err)
 	}
 
 	addr := os.Getenv("ADDR")
 
-	cfg := &Config{
-		DBPath:      make([]string, shardCount),
-		ShardNumber: shardCount,
-		JWTSecret:   secret,
-		Issuer:      issuer,
-		TokenTTL:    tokenTTL,
-		CacheTTL:    cacheTTL,
-		SLI:         sli,
-		ADDR:        addr,
-		MaxConn:     maxConn,
-		MinConn:     minConn,
-		LifeConn:    lifeConn,
-	}
+	cfg.DBPath = make([]string, shardCount)
+	cfg.JWTSecret = secret
+	cfg.Issuer = issuer
+	cfg.ADDR = addr
+	cfg.TokenTTL = token_ttl
+	cfg.CacheTTL = cache_ttl
 
 	for i := 0; i < shardCount; i++ {
 		container := os.Getenv(fmt.Sprintf("PG_SHARD_%d", i))
 		cfg.DBPath[i] = fmt.Sprintf("postgres://%s:%s@%s:5432/%s?sslmode=disable", user, pass, container, db)
 	}
 
-	return cfg
+	fmt.Println(cfg)
+
+	return &cfg
 }
 
 func parseDuration(value string) (time.Duration, error) {
@@ -98,4 +86,17 @@ func parseDuration(value string) (time.Duration, error) {
 	}
 
 	return time.Duration(minutes) * time.Minute, nil
+}
+
+func readConfigYaml(cfg *Config) {
+	yamlFile, err := os.ReadFile("config.yaml")
+	if err != nil {
+		panic(err)
+	}
+
+	err = yaml.Unmarshal(yamlFile, &cfg)
+	if err != nil {
+		panic(err)
+	}
+
 }
