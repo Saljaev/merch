@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
+	"math"
 	"merch/internal/usecase"
 
 	"log/slog"
@@ -52,7 +53,13 @@ func discoveryShard(dsn string, maxConn, minConn int, lifeConn time.Duration) *p
 		log.Error("failed to parse config", slog.Any("error", err))
 	}
 
+	if maxConn > math.MaxInt32 || maxConn < math.MinInt32 {
+		log.Error("maxConn out of int32", slog.Any("maxConn", maxConn))
+	}
 	config.MaxConns = int32(maxConn)
+	if minConn > math.MaxInt32 || minConn < math.MinInt32 {
+		log.Error("maxConn out of int32", slog.Any("minConn", minConn))
+	}
 	config.MinConns = int32(minConn)
 	config.MaxConnLifetime = lifeConn
 
@@ -109,7 +116,10 @@ func (p *PgRepo) Transfer(ctx context.Context, amount int, fromUser, toUser enti
 
 		err = p.transferInSameShard(ctx, tx, amount, fromUser, toUser)
 		if err != nil {
-			_ = tx.Rollback(ctx)
+			errToClose := tx.Rollback(ctx)
+			if errToClose != nil {
+				return errors.Join(err, errToClose)
+			}
 			return err
 		}
 
@@ -123,54 +133,110 @@ func (p *PgRepo) Transfer(ctx context.Context, amount int, fromUser, toUser enti
 
 	txTo, err := toDB.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted})
 	if err != nil {
-		_ = txFrom.Rollback(ctx)
+		errToRollback := txFrom.Rollback(ctx)
+		if errToRollback != nil {
+			return errors.Join(err, errToRollback)
+		}
 		return fmt.Errorf("%s - failed to BeginTx to_user: %w", op, err)
 	}
 
 	query := "UPDATE users SET coins = coins - $1 WHERE id = $2 AND coins >= $1"
 	row, err := txFrom.Exec(ctx, query, amount, fromUserID)
 	if err != nil {
-		_ = txFrom.Rollback(ctx)
-		_ = txTo.Rollback(ctx)
+		errTxFromRollback := txFrom.Rollback(ctx)
+		errTxToRollback := txTo.Rollback(ctx)
+		if errTxFromRollback != nil {
+			if errTxToRollback != nil {
+				return errors.Join(err, errTxFromRollback, errTxToRollback)
+			} else {
+				return errors.Join(err, errTxFromRollback)
+			}
+		}
+		if errTxToRollback != nil {
+			return errors.Join(err, errTxToRollback)
+		}
 		return fmt.Errorf("%s - failed to update coins from_user: %w", op, err)
 	}
 	if row.RowsAffected() == 0 {
-		_ = txFrom.Rollback(ctx)
-		_ = txTo.Rollback(ctx)
+		errTxFromRollback := txFrom.Rollback(ctx)
+		errTxToRollback := txTo.Rollback(ctx)
+		if errTxFromRollback != nil {
+			if errTxToRollback != nil {
+				return errors.Join(err, errTxFromRollback, errTxToRollback)
+			} else {
+				return errors.Join(err, errTxFromRollback)
+			}
+		}
+		if errTxToRollback != nil {
+			return errors.Join(err, errTxToRollback)
+		}
 		return fmt.Errorf("%s - %w", op, usecase.ErrNotEnoughCoin)
 	}
 
 	query = "UPDATE users SET coins = coins + $1 WHERE id = $2"
 	_, err = txTo.Exec(ctx, query, amount, toUserID)
 	if err != nil {
-		_ = txFrom.Rollback(ctx)
-		_ = txTo.Rollback(ctx)
+		errTxFromRollback := txFrom.Rollback(ctx)
+		errTxToRollback := txTo.Rollback(ctx)
+		if errTxFromRollback != nil {
+			if errTxToRollback != nil {
+				return errors.Join(err, errTxFromRollback, errTxToRollback)
+			} else {
+				return errors.Join(err, errTxFromRollback)
+			}
+		}
+		if errTxToRollback != nil {
+			return errors.Join(err, errTxToRollback)
+		}
 		return fmt.Errorf("%s - failed to update coins to_user: %w", op, err)
 	}
 
 	query = "INSERT INTO coin_history (from_user, from_user_id, to_user, to_user_id, amount) VALUES ($1, $2, $3, $4, $5)"
 	_, err = txFrom.Exec(ctx, query, fromUserName, fromUserID, toUserName, toUserID, amount)
 	if err != nil {
-		_ = txFrom.Rollback(ctx)
-		_ = txTo.Rollback(ctx)
+		errTxFromRollback := txFrom.Rollback(ctx)
+		errTxToRollback := txTo.Rollback(ctx)
+		if errTxFromRollback != nil {
+			if errTxToRollback != nil {
+				return errors.Join(err, errTxFromRollback, errTxToRollback)
+			} else {
+				return errors.Join(err, errTxFromRollback)
+			}
+		}
+		if errTxToRollback != nil {
+			return errors.Join(err, errTxToRollback)
+		}
 		return fmt.Errorf("%s - failed to insert in coin_history from_user: %w", op, err)
 	}
 
 	query = "INSERT INTO coin_history (from_user, from_user_id, to_user, to_user_id, amount) VALUES ($1, $2, $3, $4, $5)"
 	_, err = txTo.Exec(ctx, query, fromUserName, fromUserID, toUserName, toUserID, amount)
 	if err != nil {
-		_ = txFrom.Rollback(ctx)
-		_ = txTo.Rollback(ctx)
+		errTxFromRollback := txFrom.Rollback(ctx)
+		errTxToRollback := txTo.Rollback(ctx)
+		if errTxFromRollback != nil {
+			if errTxToRollback != nil {
+				return errors.Join(err, errTxFromRollback, errTxToRollback)
+			} else {
+				return errors.Join(err, errTxFromRollback)
+			}
+		}
+		if errTxToRollback != nil {
+			return errors.Join(err, errTxToRollback)
+		}
 		return fmt.Errorf("%s - failed to insert in coin_history to_user: %w", op, err)
 	}
 
 	if err = txFrom.Commit(ctx); err != nil {
-		_ = txTo.Rollback(ctx)
-		return err
+		errTxToRollback := txTo.Rollback(ctx)
+		if errTxToRollback != nil {
+			return errors.Join(err, errTxToRollback)
+		}
+		return fmt.Errorf("%s - failed to commit: %w", op, err)
 	}
 
 	if err = txTo.Commit(ctx); err != nil {
-		return err
+		return fmt.Errorf("%s - failed to commit: %w", op, err)
 	}
 
 	return nil
@@ -230,11 +296,17 @@ func (p *PgRepo) transferInSameShard(ctx context.Context, tx pgx.Tx, amount int,
 	query := "UPDATE users SET coins = coins - $1 WHERE id = $2 AND coins >= $1"
 	row, err := tx.Exec(ctx, query, amount, fromUserID)
 	if err != nil {
-		_ = tx.Rollback(ctx)
+		errTxRollback := tx.Rollback(ctx)
+		if errTxRollback != nil {
+			return errors.Join(err, errTxRollback)
+		}
 		return fmt.Errorf("%s - failed to update coins from_user: %w", op, err)
 	}
 	if row.RowsAffected() == 0 {
-		_ = tx.Rollback(ctx)
+		errTxRollback := tx.Rollback(ctx)
+		if errTxRollback != nil {
+			return errors.Join(err, errTxRollback)
+		}
 		return fmt.Errorf("%s - %w", op, usecase.ErrNotEnoughCoin)
 	}
 
@@ -283,7 +355,12 @@ func (p *PgRepo) Purchase(ctx context.Context, userID int, coins, value int, ite
 		return fmt.Errorf("%s - failed to start transaction: %w", op, err)
 	}
 
-	defer tx.Rollback(ctx)
+	defer func() {
+		err = tx.Rollback(ctx)
+		if err != nil {
+			return
+		}
+	}()
 
 	query := "UPDATE users SET " +
 		"coins = $1 " +
@@ -332,17 +409,19 @@ func (p *PgRepo) GetInfo(ctx context.Context, userID int) (entity.User, []entity
 		"WHERE users.id = $1"
 
 	rowsInv, err := db.Query(ctx, query, userID)
-	defer rowsInv.Close()
-
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return entity.User{}, nil, fmt.Errorf("%s - failed to get user inventory: %w", op, err)
 	}
+	defer rowsInv.Close()
 
 	var inventory []entity.Inventory
 
 	for rowsInv.Next() {
 		inv := entity.Inventory{}
-		rowsInv.Scan(&inv.Item, &inv.Quantity)
+		err = rowsInv.Scan(&inv.Item, &inv.Quantity)
+		if err != nil {
+			return entity.User{}, nil, fmt.Errorf("%s - failed to rows scan: %w", op, err)
+		}
 		inventory = append(inventory, inv)
 	}
 
@@ -376,17 +455,19 @@ func (p *PgRepo) GetTransaction(ctx context.Context, userID int) ([]entity.CoinH
 		"WHERE to_user_id = $1"
 
 	rowsCoins, err := db.Query(ctx, query, userID)
-	defer rowsCoins.Close()
-
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%s - failed to get user history: %w", op, err)
 	}
+	defer rowsCoins.Close()
 
 	var coinsHistory []entity.CoinHistory
 
 	for rowsCoins.Next() {
 		coinHistory := entity.CoinHistory{}
-		rowsCoins.Scan(&coinHistory.ToUser, &coinHistory.Amount, &coinHistory.Type)
+		err = rowsCoins.Scan(&coinHistory.ToUser, &coinHistory.Amount, &coinHistory.Type)
+		if err != nil {
+			return nil, fmt.Errorf("%s - failed to rows scan: %w", op, err)
+		}
 		if coinHistory.Type == "received" {
 			coinHistory.ToUser, coinHistory.FromUser = coinHistory.FromUser, coinHistory.ToUser
 		}
