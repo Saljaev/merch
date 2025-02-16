@@ -1,0 +1,47 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+  staticcheck:
+    checks: ["all"]
+  gosec:
+    exclude: ["G104"]
+  revive:
+    ignore-generated-header: true
+  lll:
+    line-length: 120
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - gosimple
+    - unused
+    - ineffassign
+    - gosec
+    - revive
+    - nakedret
+    - lll
+
+issues:
+  exclude-rules:
+    - path: "migrations/*"
+      linters: ["gosec"]
+  max-same-issues: 5
+  max-issues-per-linter: 0
+  exclude-use-default: false
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
