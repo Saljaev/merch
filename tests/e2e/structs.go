@@ -1,7 +1,8 @@
 package e2e
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math/big"
 )
 
 type authReq struct {
@@ -18,7 +19,11 @@ const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456
 func RandomString(n int) string {
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = letterBytes[rand.Intn(len(letterBytes))]
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(letterBytes))))
+		if err != nil {
+			return ""
+		}
+		b[i] = letterBytes[num.Int64()]
 	}
 	return string(b)
 }
