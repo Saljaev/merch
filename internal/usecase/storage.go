@@ -104,7 +104,6 @@ func (u *UseCase) Purchase(ctx context.Context, id int, username, item string) e
 	}
 
 	u.cache.Set(username, user)
-
 	return nil
 }
 
@@ -143,7 +142,7 @@ func (u *UseCase) Transfer(ctx context.Context, amount, fromID int, fromUsername
 	if !ok {
 		toUser, err = u.repo.GetUserByUsername(ctx, toUsername)
 		if err != nil {
-			if errors.Is(err, ErrUserNotFound) {
+			if errors.Is(errors.Unwrap(err), ErrUserNotFound) {
 				return fmt.Errorf("%s - failed to get user by username: %w", op, ErrUserNotFound)
 			} else {
 				return fmt.Errorf("%s - failed to get user by username: %w", op, err)
