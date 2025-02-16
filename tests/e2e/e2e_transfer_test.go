@@ -52,15 +52,10 @@ func TestE2ETransfer(t *testing.T) {
 	}
 
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s%s", URL, "/auth"), bytes.NewBuffer((user1Req)))
-	if err != nil {
-		panic(err)
-	}
 
 	client := &http.Client{}
 	_, err = client.Do(req)
-	if err != nil {
-		panic(err)
-	}
+	assert.NoError(t, err)
 
 	type args struct {
 		method   string

@@ -119,18 +119,16 @@ func TestE2EAuth(t *testing.T) {
 				return
 			}
 
-			var authResp struct {
-				Token string `json:"token"`
-			}
+			var authResponse authResp
 
 			bodyBytes, _ := io.ReadAll(respAuth.Body)
 
-			err = json.Unmarshal(bodyBytes, &authResp)
+			err = json.Unmarshal(bodyBytes, &authResponse)
 
 			assert.NoError(t, err)
 
 			assert.Equal(t, respAuth.StatusCode, tt.wantStatusAuth)
-			assert.NotNil(t, authResp)
+			assert.NotNil(t, authResponse)
 		})
 	}
 }

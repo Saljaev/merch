@@ -178,17 +178,15 @@ func TestE2EBuy(t *testing.T) {
 				assert.NoError(t, err)
 				defer respAuth.Body.Close()
 
-				var authResp struct {
-					Token string `json:"token"`
-				}
-
 				bodyBytes, _ := io.ReadAll(respAuth.Body)
 
-				err = json.Unmarshal(bodyBytes, &authResp)
+				var authResponse authResp
+
+				err = json.Unmarshal(bodyBytes, &authResponse)
 
 				_, ok := tt.headers["Authorization"]
 				if ok {
-					tt.headers["Authorization"] = fmt.Sprintf("Bearer %s", authResp.Token)
+					tt.headers["Authorization"] = fmt.Sprintf("Bearer %s", authResponse.Token)
 				} else {
 					tt.headers["Authorization"] = "Bearer token"
 				}
