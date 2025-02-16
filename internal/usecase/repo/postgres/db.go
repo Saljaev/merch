@@ -69,9 +69,12 @@ func discoveryShard(dsn string, maxConn, minConn int, lifeConn time.Duration) *p
 	return pool
 }
 
+// выбор в какой шард записывать зависит только от старших битов
+// [41-бит timestamp] [10-бит Machine ID] [12-бит sequence]
+// поэтому сдвигаем на 22 бита
 func (p *PgRepo) getShardID(ID int) int {
 	if p.ShardCount > 1 {
-		return ID % p.ShardCount
+		return (ID >> 22) % p.ShardCount
 	} else {
 		return 0
 	}

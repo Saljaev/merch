@@ -2,12 +2,10 @@ package entity
 
 import (
 	"crypto/md5"
-	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"github.com/sony/sonyflake"
 	"log/slog"
-	"math/big"
 )
 
 const DefaultCoins = 1000
@@ -45,15 +43,14 @@ type CoinHistory struct {
 
 func NewUser(username, password string) (User, error) {
 	hashedPassword := HashPassword(password)
-
-	t, _ := rand.Int(rand.Reader, big.NewInt(100000000))
+	
 	userID, err := sf.NextID()
 	if err != nil {
 		return User{}, fmt.Errorf("failed to generate userID: %w", err)
 	}
 
 	return User{
-		ID:        int64(userID) + t.Int64(),
+		ID:        int64(userID),
 		Coins:     DefaultCoins,
 		UserName:  username,
 		Password:  hashedPassword,
