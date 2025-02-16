@@ -40,7 +40,6 @@ func ConfigLoad() *Config {
 
 	readConfigYaml(&cfg)
 
-	shardCount, _ := strconv.Atoi(os.Getenv("SHARD_COUNT"))
 	user := os.Getenv("POSTGRES_USER")
 	pass := os.Getenv("POSTGRES_PASSWORD")
 	db := os.Getenv("DB")
@@ -57,19 +56,17 @@ func ConfigLoad() *Config {
 
 	addr := os.Getenv("ADDR")
 
-	cfg.DBPath = make([]string, shardCount)
+	cfg.DBPath = make([]string, cfg.ShardNumber)
 	cfg.JWTSecret = secret
 	cfg.Issuer = issuer
 	cfg.ADDR = addr
 	cfg.TokenTTL = token_ttl
 	cfg.CacheTTL = cache_ttl
 
-	for i := 0; i < shardCount; i++ {
+	for i := 0; i < cfg.ShardNumber; i++ {
 		container := os.Getenv(fmt.Sprintf("PG_SHARD_%d", i))
 		cfg.DBPath[i] = fmt.Sprintf("postgres://%s:%s@%s:5432/%s?sslmode=disable", user, pass, container, db)
 	}
-
-	fmt.Println(cfg)
 
 	return &cfg
 }
