@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
-	usecase2 "merch/internal/usecase"
+	"merch/internal/usecase"
 
 	"log/slog"
 	"merch/internal/entity"
@@ -20,13 +20,67 @@ var (
 	log = slog.Default()
 )
 
-const BucketCount = 4
-
 type (
 	ShardMap map[int]*pgxpool.Pool
 )
 type PgRepo struct {
-	ShardMap ShardMap
+	ShardMap   ShardMap
+	ShardCount int
+}
+
+// check for implementation
+var _ usecase.UserRepo = (*PgRepo)(nil)
+
+func NewRepo(dsns map[int]string, maxConn, minConn, shardCount int, lifeConn time.Duration) *PgRepo {
+	return &PgRepo{
+		ShardMap:   initShardMap(dsns, maxConn, minConn, lifeConn),
+		ShardCount: shardCount,
+	}
+}
+
+func initShardMap(dsns map[int]string, maxConn, minConn int, lifeConn time.Duration) ShardMap {
+	m := make(ShardMap, len(dsns))
+	for sh, dsn := range dsns {
+		m[sh] = discoveryShard(dsn, maxConn, minConn, lifeConn)
+	}
+	return m
+}
+
+func discoveryShard(dsn string, maxConn, minConn int, lifeConn time.Duration) *pgxpool.Pool {
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		log.Error("failed to parse config", slog.Any("error", err))
+	}
+
+	config.MaxConns = int32(maxConn)
+	config.MinConns = int32(minConn)
+	config.MaxConnLifetime = lifeConn
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		log.Error("failed new pgxpool with config", slog.Any("error", err))
+	}
+
+	err = pool.Ping(context.Background())
+	if err != nil {
+		log.Error("failed ping shard", slog.Any("error", err))
+	}
+
+	return pool
+}
+
+func (p *PgRepo) getShardID(ID int) int {
+	if p.ShardCount > 1 {
+		return ID % p.ShardCount
+	} else {
+		return 0
+	}
+}
+
+func (p *PgRepo) CloseDB() {
+	for _, pool := range p.ShardMap {
+		pool.Close()
+	}
 }
 
 func (p *PgRepo) Transfer(ctx context.Context, amount int, fromUser, toUser entity.User) error {
@@ -80,7 +134,7 @@ func (p *PgRepo) Transfer(ctx context.Context, amount int, fromUser, toUser enti
 	if row.RowsAffected() == 0 {
 		_ = txFrom.Rollback(ctx)
 		_ = txTo.Rollback(ctx)
-		return fmt.Errorf("%s - %w", op, usecase2.ErrNotEnoughCoin)
+		return fmt.Errorf("%s - %w", op, usecase.ErrNotEnoughCoin)
 	}
 
 	query = "UPDATE users SET coins = coins + $1 WHERE id = $2"
@@ -133,7 +187,7 @@ func (p *PgRepo) GetUserByID(ctx context.Context, ID int) (entity.User, error) {
 		}
 	}
 
-	return entity.User{}, fmt.Errorf("%s - %w", op, usecase2.ErrUserNotFound)
+	return entity.User{}, fmt.Errorf("%s - %w", op, usecase.ErrUserNotFound)
 }
 
 func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity.User, error) {
@@ -149,11 +203,11 @@ func (p *PgRepo) GetUserByUsername(ctx context.Context, username string) (entity
 			return user, nil
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			return entity.User{}, fmt.Errorf("%s - db.QueryRow: %w", op, usecase2.ErrUserNotFound)
+			return entity.User{}, fmt.Errorf("%s - db.QueryRow: %w", op, usecase.ErrUserNotFound)
 		}
 	}
 
-	return entity.User{}, fmt.Errorf("%s - %w", op, usecase2.ErrUserNotFound)
+	return entity.User{}, fmt.Errorf("%s - %w", op, usecase.ErrUserNotFound)
 }
 
 func (p *PgRepo) transferInSameShard(ctx context.Context, tx pgx.Tx, amount int, fromUser, toUser entity.User) error {
@@ -211,7 +265,6 @@ func (p *PgRepo) AddUser(ctx context.Context, user entity.User) error {
 func (p *PgRepo) Purchase(ctx context.Context, userID int, coins, value int, item string) error {
 	const op = "PgRepo - Purchase"
 
-	//userID := int(user.ID)
 	shardNumber := p.getShardID(userID)
 	db := p.ShardMap[shardNumber]
 
@@ -332,104 +385,4 @@ func (p *PgRepo) GetTransaction(ctx context.Context, userID int) ([]entity.CoinH
 	}
 
 	return coinsHistory, nil
-}
-
-// check for implementation
-var _ usecase2.UserRepo = (*PgRepo)(nil)
-
-func NewRepo(dsns map[int]string, maxConn, minConn int, lifeConn time.Duration) *PgRepo {
-	return &PgRepo{
-		ShardMap: initShardMap(dsns, maxConn, minConn, lifeConn),
-	}
-}
-
-func initShardMap(dsns map[int]string, maxConn, minConn int, lifeConn time.Duration) ShardMap {
-	m := make(ShardMap, len(dsns))
-	for sh, dsn := range dsns {
-		m[sh] = discoveryShard(dsn, maxConn, minConn, lifeConn)
-	}
-	return m
-}
-
-// TODO: change to migrations
-// TODO: add index on users(username)
-func (p *PgRepo) InitEntity(shardNum int) error {
-	query := "CREATE TABLE IF NOT EXISTS users (" +
-		"id BIGINT PRIMARY KEY, " +
-		"username TEXT UNIQUE NOT NULL, " +
-		"password TEXT NOT NULL, " +
-		"coins INT)"
-
-	rows, err := p.ShardMap[shardNum].Query(context.Background(), query)
-	if err != nil {
-		return fmt.Errorf("failed to migrate users: %w", err)
-	}
-	query = "CREATE UNIQUE INDEX users_username_idx ON users (username);"
-	rows, err = p.ShardMap[shardNum].Query(context.Background(), query)
-	if err != nil {
-		return fmt.Errorf("failed to create users index:%w", err)
-	}
-
-	query = "CREATE TABLE IF NOT EXISTS inventory (id BIGSERIAL PRIMARY KEY, user_id BIGINT REFERENCES users(id), item TEXT NOT NULL, quantity INT)"
-
-	rows, err = p.ShardMap[shardNum].Query(context.Background(), query)
-	if err != nil {
-		return fmt.Errorf("failed to migrate inventory :%w", err)
-	}
-
-	query = "ALTER TABLE inventory ADD CONSTRAINT inventory_unique_user_item UNIQUE (user_id, item)"
-
-	rows, err = p.ShardMap[shardNum].Query(context.Background(), query)
-	if err != nil {
-		return fmt.Errorf("failed to migrate inventory :%w", err)
-	}
-	query = "CREATE TABLE IF NOT EXISTS coin_history (" +
-		"id BIGSERIAL PRIMARY KEY, " +
-		"from_user TEXT NOT NULL, " +
-		"from_user_id BIGINT, " +
-		"to_user TEXT NOT NULL, " +
-		"to_user_id BIGINT, " +
-		"amount INT NOT NULL, " +
-		"created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW())"
-
-	rows, err = p.ShardMap[shardNum].Query(context.Background(), query)
-	if err != nil {
-		return fmt.Errorf("failed to migrate coin_history :%w", err)
-	}
-
-	_ = rows
-	return nil
-}
-
-func discoveryShard(dsn string, maxConn, minConn int, lifeConn time.Duration) *pgxpool.Pool {
-	config, err := pgxpool.ParseConfig(dsn)
-	if err != nil {
-		log.Error("failed to parse config", slog.Any("error", err))
-	}
-
-	config.MaxConns = int32(maxConn)
-	config.MinConns = int32(minConn)
-	config.MaxConnLifetime = lifeConn
-
-	pool, err := pgxpool.NewWithConfig(context.Background(), config)
-	if err != nil {
-		log.Error("failed new pgxpool with config", slog.Any("error", err))
-	}
-
-	err = pool.Ping(context.Background())
-	if err != nil {
-		log.Error("failed ping shard", slog.Any("error", err))
-	}
-
-	return pool
-}
-
-func (p *PgRepo) getShardID(ID int) int {
-	return ID % BucketCount
-}
-
-func (p *PgRepo) CloseDB() {
-	for _, pool := range p.ShardMap {
-		pool.Close()
-	}
 }
