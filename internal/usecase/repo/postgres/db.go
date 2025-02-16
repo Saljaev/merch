@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/lib/pq"
+	"hash/fnv"
 	"math"
 	"merch/internal/usecase"
 
@@ -76,12 +77,18 @@ func discoveryShard(dsn string, maxConn, minConn int, lifeConn time.Duration) *p
 	return pool
 }
 
-// выбор в какой шард записывать зависит только от старших битов
-// [41-бит timestamp] [10-бит Machine ID] [12-бит sequence]
-// поэтому сдвигаем на 22 бита
 func (p *PgRepo) getShardID(ID int) int {
 	if p.ShardCount > 1 {
-		return (ID >> 22) % p.ShardCount
+		hasher := fnv.New32a()
+		_, err := hasher.Write([]byte(fmt.Sprintf("%d", ID)))
+		if err != nil {
+			return 0
+		}
+		hash := hasher.Sum32()
+		if hash > math.MaxInt32 {
+			return 0
+		}
+		return int(hash) % p.ShardCount
 	} else {
 		return 0
 	}
@@ -331,7 +338,7 @@ func (p *PgRepo) AddUser(ctx context.Context, user entity.User) error {
 	const op = "PgRepo - AddUser"
 
 	query := "INSERT INTO users(id, username, password, coins) " +
-		"VALUES ($1, $2, $3, $4)"
+		"VALUES ($1, $2, $3, $4) ON CONFLICT (username) DO NOTHING"
 
 	shardNumber := p.getShardID(int(user.ID))
 
