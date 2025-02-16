@@ -37,7 +37,7 @@ func (m *MerchHandler) Login(ctx *utilapi.APIContext) {
 	id, err := m.user.AddUser(ctx, req.Username, req.Password)
 	if err != nil {
 		ctx.Error("failed to add user", err)
-		if errors.Is(err, usecase.ErrNotAuthorization) {
+		if errors.Is(errors.Unwrap(err), usecase.ErrNotAuthorization) {
 			ctx.WriteFailure(http.StatusUnauthorized, "incorrect username or password")
 			return
 		} else {

@@ -28,8 +28,10 @@ func (m *MerchHandler) Buy(ctx *utilapi.APIContext) {
 	err := m.user.Purchase(ctx, id, username, item)
 	if err != nil {
 		ctx.Error("failed to buy item", err)
-		if errors.Is(err, usecase.ErrNotEnoughCoin) {
+		if errors.Is(errors.Unwrap(err), usecase.ErrNotEnoughCoin) {
 			ctx.WriteFailure(http.StatusBadRequest, "not enough coin")
+		} else if errors.Is(errors.Unwrap(err), usecase.ErrNoItem) {
+			ctx.WriteFailure(http.StatusBadRequest, "no such item")
 		} else {
 			ctx.WriteFailure(http.StatusInternalServerError, "internal error")
 		}

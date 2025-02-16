@@ -45,9 +45,9 @@ func (m *MerchHandler) SendCoin(ctx *utilapi.APIContext) {
 	err = m.user.Transfer(ctx, req.Amount, fromID, fromUsername, req.ToUser)
 	if err != nil {
 		ctx.Error("failed to transfer coin", err)
-		if errors.Is(err, usecase.ErrNotEnoughCoin) {
+		if errors.Is(errors.Unwrap(err), usecase.ErrNotEnoughCoin) {
 			ctx.WriteFailure(http.StatusBadRequest, "not enough coin")
-		} else if errors.Is(err, usecase.ErrUserNotFound) {
+		} else if errors.Is(errors.Unwrap(err), usecase.ErrUserNotFound) {
 			ctx.WriteFailure(http.StatusBadRequest, "not such user")
 		} else {
 			ctx.WriteFailure(http.StatusInternalServerError, "internal error")
