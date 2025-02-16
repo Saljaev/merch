@@ -17,17 +17,19 @@ type DataBase struct {
 }
 
 type Config struct {
-	DBPath      []string
+	DBPath    []string
+	JWTSecret string
+	Issuer    string
+	ADDR      string
+
 	ShardNumber int `yaml:"shard_number"`
-	JWTSecret   string
-	Issuer      string
-	TokenTTL    time.Duration
-	CacheTTL    time.Duration
-	SLI         time.Duration `yaml:"sli"`
-	ADDR        string
-	MaxConn     int           `yaml:"max_conn"`
-	MinConn     int           `yaml:"min_conn"`
-	LifeConn    time.Duration `yaml:"life_conn"`
+	MaxConn     int `yaml:"max_conn"`
+	MinConn     int `yaml:"min_conn"`
+	
+	TokenTTL time.Duration
+	CacheTTL time.Duration
+	LifeConn time.Duration `yaml:"life_conn"`
+	SLI      time.Duration `yaml:"sli"`
 }
 
 func ConfigLoad() *Config {
