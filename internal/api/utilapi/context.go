@@ -73,9 +73,12 @@ func (ctx *APIContext) Decode(dest validator) error {
 func (ctx *APIContext) WriteFailure(code int, msg string) {
 	ctx.w.WriteHeader(code)
 
-	data, _ := json.Marshal(Error{ErrorMessage: msg})
+	data, err := json.Marshal(Error{ErrorMessage: msg})
+	if err != nil {
+		ctx.Error("json.Marshal error", err)
+	}
 
-	_, err := ctx.w.Write(data)
+	_, err = ctx.w.Write(data)
 	if err != nil {
 		ctx.Error("response write error", err)
 	}
@@ -83,10 +86,16 @@ func (ctx *APIContext) WriteFailure(code int, msg string) {
 }
 
 func (ctx *APIContext) SuccessWithData(data interface{}) {
-	jsonData, _ := json.Marshal(data)
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		ctx.Error("failed to json.Marhal", err)
+	}
 
 	ctx.w.WriteHeader(http.StatusOK)
-	_, _ = ctx.w.Write(jsonData)
+	_, err = ctx.w.Write(jsonData)
+	if err != nil {
+		ctx.Error("failed to write to response writer", err)
+	}
 }
 
 func (ctx *APIContext) GetFromHeader(key string) string {

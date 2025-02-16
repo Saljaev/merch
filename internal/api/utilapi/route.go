@@ -2,7 +2,6 @@ package utilapi
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 )
@@ -28,7 +27,7 @@ func (r *Router) Handle(pattern, method string, handlerFuncs ...HandlerFunc) {
 			defer close(done)
 
 			ctx := newAPIContext(w, req, r.log, r.sli)
-			ctx.log = ctx.log.With(slog.String("pattern", fmt.Sprintf("%s", pattern)))
+			ctx.log = ctx.log.With(slog.String("pattern", pattern))
 			ctx.w.Header().Set("Content-Type", "application/json; charset=utf-8")
 
 			if req.Method != method {
