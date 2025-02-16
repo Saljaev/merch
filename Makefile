@@ -1,4 +1,4 @@
-.PHONY: prepare build start stop delete e2e-prepare e2e-build e2e-start e2e-auth e2e-buy e2e-send load-test-build load-test-start
+.PHONY: prepare build start stop delete e2e-prepare e2e-build e2e-start e2e-auth e2e-buy e2e-send load-test-build load-test-start linter
 
 TARGET_DIR ?= .
 ENV_FILE=$(TARGET_DIR)/.env
@@ -57,8 +57,14 @@ e2e-buy:
 e2e-send:
 	go test -v $(E2E_TEST) -run ^TestE2ETransfer
 
+e2e-info:
+	go test -v $(E2E_TEST) -run ^TestE2EInfo
+
 e2e-delete:
 	docker compose -f ./tests/docker-compose.yaml down -v
+
+linter:
+	golangci-lint run
 
 
 
