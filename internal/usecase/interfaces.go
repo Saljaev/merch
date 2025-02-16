@@ -5,7 +5,6 @@ import (
 	"merch/internal/entity"
 )
 
-// mockery --all --output=internal/mocks --case=underscore
 type (
 	UserRepo interface {
 		AddUser(ctx context.Context, user entity.User) error

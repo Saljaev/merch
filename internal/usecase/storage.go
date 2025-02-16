@@ -15,11 +15,13 @@ var (
 )
 
 type UseCase struct {
-	repo UserRepo
-	//cache *cache.Cache[string]
+	repo  UserRepo
 	cache Cache[string]
 	shop  ShopRepo
 }
+
+// check for implementation
+var _ UserUseCase = (*UseCase)(nil)
 
 func (u *UseCase) AddUser(ctx context.Context, username, password string) (int, error) {
 	const op = "UseCase - AddUser"
@@ -58,7 +60,7 @@ func (u *UseCase) Purchase(ctx context.Context, id int, username, item string) e
 	cost, err := u.shop.GetCost(item)
 	if err != nil {
 		if errors.Is(err, ErrNoItem) {
-			return ErrNoItem
+			return fmt.Errorf("%s - failed to get cost item: %w", op, ErrNoItem)
 		}
 		return fmt.Errorf("%s - failed to get cost item: %w", op, err)
 	}
@@ -75,7 +77,7 @@ func (u *UseCase) Purchase(ctx context.Context, id int, username, item string) e
 	}
 
 	if user.Coins < cost {
-		return ErrNotEnoughCoin
+		return fmt.Errorf("%s - failed to buy: %w", op, ErrNotEnoughCoin)
 	}
 
 	err = u.repo.Purchase(ctx, id, user.Coins, cost, item)
@@ -142,7 +144,7 @@ func (u *UseCase) Transfer(ctx context.Context, amount, fromID int, fromUsername
 		toUser, err = u.repo.GetUserByUsername(ctx, toUsername)
 		if err != nil {
 			if errors.Is(err, ErrUserNotFound) {
-				return ErrUserNotFound
+				return fmt.Errorf("%s - failed to get user by username: %w", op, ErrUserNotFound)
 			} else {
 				return fmt.Errorf("%s - failed to get user by username: %w", op, err)
 			}
@@ -164,14 +166,14 @@ func (u *UseCase) Transfer(ctx context.Context, amount, fromID int, fromUsername
 	} else {
 		fromUser = cacheFromUser.(entity.User)
 		if fromUser.Coins < amount {
-			return ErrNotEnoughCoin
+			return fmt.Errorf("%s - failed to transfer coin: %w", op, ErrNotEnoughCoin)
 		}
 	}
 
 	err = u.repo.Transfer(ctx, amount, fromUser, toUser)
 	if err != nil {
 		if errors.Is(err, ErrNotEnoughCoin) {
-			return ErrNotEnoughCoin
+			return fmt.Errorf("%s - failed to transfer coin: %w", op, ErrNotEnoughCoin)
 		} else {
 			return fmt.Errorf("%s - failed to transfer coin: %w", op, err)
 		}
@@ -184,10 +186,6 @@ func (u *UseCase) Transfer(ctx context.Context, amount, fromID int, fromUsername
 	u.cache.Set(fromUsername, fromUser)
 
 	return nil
-}
-
-func (u *UseCase) GetUserByUsername(ctx context.Context, username string) (entity.User, error) {
-	return u.repo.GetUserByUsername(ctx, username)
 }
 
 func NewStorage(repo UserRepo, c Cache[string], shop ShopRepo) *UseCase {
