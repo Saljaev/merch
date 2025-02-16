@@ -13,22 +13,23 @@ import (
 func TestE2EBuy(t *testing.T) {
 	URL := "http://127.0.0.1:8080/api"
 
-	username := "testuser"
-	password := "secret"
+	username := RandomString(30)
+	password := RandomString(30)
 
-	userReq, _ := json.Marshal(authReq{
+	userReq, err := json.Marshal(authReq{
 		Username: username,
 		Password: password,
 	})
+	assert.NoError(t, err)
 
 	reqHeaders := map[string]string{
 		"Authorization": "",
 	}
 
 	type args struct {
+		item     map[string]int
 		method   string
 		endPoint string
-		item     map[string]int
 	}
 	type auth struct {
 		method   string
@@ -42,13 +43,17 @@ func TestE2EBuy(t *testing.T) {
 		body:     userReq,
 	}
 	tests := []struct {
-		name          string
-		url           string
-		args          args
-		auth          auth
-		headers       map[string]string
-		wantAuth      bool
+		wantAuth bool
+
 		wantStatusBuy int
+
+		args args
+		auth auth
+
+		name string
+		url  string
+
+		headers map[string]string
 	}{
 		{
 			name: "Successful buy 1 item",
@@ -163,26 +168,29 @@ func TestE2EBuy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			var req *http.Request
-			var err error
 
 			if tt.wantAuth {
-				req, err = http.NewRequest(tt.auth.method, fmt.Sprintf("%s%s", tt.url, tt.auth.endPoint), bytes.NewBuffer(tt.auth.body))
-
+				req, err = http.NewRequest(tt.auth.method, fmt.Sprintf("%s%s", tt.url, tt.auth.endPoint),
+					bytes.NewBuffer(tt.auth.body))
 				assert.NoError(t, err)
 
 				client := &http.Client{}
-				respAuth, err := client.Do(req)
+				respAuth, errDo := client.Do(req)
+				assert.NoError(t, errDo)
 
-				assert.NoError(t, err)
-				defer respAuth.Body.Close()
+				defer func() {
+					err = respAuth.Body.Close()
+					assert.NoError(t, err)
+				}()
 
-				bodyBytes, _ := io.ReadAll(respAuth.Body)
+				bodyBytes, readErr := io.ReadAll(respAuth.Body)
+				assert.NoError(t, readErr)
 
 				var authResponse authResp
 
 				err = json.Unmarshal(bodyBytes, &authResponse)
+				assert.NoError(t, err)
 
 				_, ok := tt.headers["Authorization"]
 				if ok {
@@ -204,9 +212,11 @@ func TestE2EBuy(t *testing.T) {
 
 					client1 := &http.Client{}
 					respBuy, err := client1.Do(req)
-					defer respBuy.Body.Close()
-
 					assert.NoError(t, err)
+					defer func() {
+						err = respBuy.Body.Close()
+						assert.NoError(t, err)
+					}()
 
 					assert.Equal(t, tt.wantStatusBuy, respBuy.StatusCode)
 				}

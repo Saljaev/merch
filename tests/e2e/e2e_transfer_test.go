@@ -21,7 +21,10 @@ func createTransferReq(username string, amount int) []byte {
 		Amount: amount,
 	}
 
-	data, _ := json.Marshal(&req)
+	data, err := json.Marshal(&req)
+	if err != nil {
+		return nil
+	}
 
 	return data
 }
@@ -29,29 +32,32 @@ func createTransferReq(username string, amount int) []byte {
 func TestE2ETransfer(t *testing.T) {
 	URL := "http://127.0.0.1:8080/api"
 
-	username := "user"
-	username1 := "user1"
-	password := "secret"
+	username := RandomString(30)
+	username1 := RandomString(30)
+	password := RandomString(30)
 
 	validCoins := 100
 	toManyCoins := 10000
 	invalidCoins := -1
 
-	userReq, _ := json.Marshal(authReq{
+	userReq, err := json.Marshal(authReq{
 		Username: username,
 		Password: password,
 	})
+	assert.NoError(t, err)
 
-	user1Req, _ := json.Marshal(authReq{
+	user1Req, err := json.Marshal(authReq{
 		Username: username1,
 		Password: password,
 	})
+	assert.NoError(t, err)
 
 	reqHeaders := map[string]string{
 		"Authorization": "",
 	}
 
 	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s%s", URL, "/auth"), bytes.NewBuffer((user1Req)))
+	assert.NoError(t, err)
 
 	client := &http.Client{}
 	_, err = client.Do(req)
@@ -74,13 +80,17 @@ func TestE2ETransfer(t *testing.T) {
 		body:     userReq,
 	}
 	tests := []struct {
-		name               string
-		url                string
-		args               args
-		auth               auth
-		headers            map[string]string
-		wantAuth           bool
+		wantAuth bool
+
 		wantStatusTransfer int
+
+		args args
+		auth auth
+
+		name string
+		url  string
+
+		headers map[string]string
 	}{
 		{
 			name: "Successful transfer coin",
@@ -127,7 +137,7 @@ func TestE2ETransfer(t *testing.T) {
 			args: args{
 				method:   http.MethodPost,
 				endPoint: "/sendCoin",
-				body:     createTransferReq("not user", validCoins),
+				body:     createTransferReq(RandomString(30), validCoins),
 			},
 			auth:               reqAuth,
 			headers:            reqHeaders,
@@ -204,49 +214,53 @@ func TestE2ETransfer(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var req *http.Request
-			var err error
 
 			if tt.wantAuth {
-				req, err = http.NewRequest(tt.auth.method, fmt.Sprintf("%s%s", tt.url, tt.auth.endPoint), bytes.NewBuffer(tt.auth.body))
-
+				req, err = http.NewRequest(tt.auth.method, fmt.Sprintf("%s%s", tt.url, tt.auth.endPoint),
+					bytes.NewBuffer(tt.auth.body))
 				assert.NoError(t, err)
 
-				client := &http.Client{}
-				respAuth, err := client.Do(req)
+				client = &http.Client{}
+				respAuth, errDo := client.Do(req)
+				assert.NoError(t, errDo)
 
+				defer func() {
+					err = respAuth.Body.Close()
+					assert.NoError(t, err)
+				}()
+
+				authResponse := authResp{}
+
+				bodyBytes, readErr := io.ReadAll(respAuth.Body)
+				assert.NoError(t, readErr)
+
+				err = json.Unmarshal(bodyBytes, &authResponse)
 				assert.NoError(t, err)
-				defer respAuth.Body.Close()
-
-				var authResp struct {
-					Token string `json:"token"`
-				}
-
-				bodyBytes, _ := io.ReadAll(respAuth.Body)
-
-				err = json.Unmarshal(bodyBytes, &authResp)
 
 				_, ok := tt.headers["Authorization"]
 				if ok {
-					tt.headers["Authorization"] = fmt.Sprintf("Bearer %s", authResp.Token)
+					tt.headers["Authorization"] = fmt.Sprintf("Bearer %s", authResponse.Token)
 				} else {
 					tt.headers["Authorization"] = "Bearer token"
 				}
 			}
 
-			req, err = http.NewRequest(tt.args.method, fmt.Sprintf("%s%s", tt.url, tt.args.endPoint), bytes.NewBuffer(tt.args.body))
+			req, err = http.NewRequest(tt.args.method, fmt.Sprintf("%s%s", tt.url, tt.args.endPoint),
+				bytes.NewBuffer(tt.args.body))
+			assert.NoError(t, err)
 
 			for k, v := range tt.headers {
 				req.Header.Set(k, v)
 			}
 
-			assert.NoError(t, err)
-
 			client1 := &http.Client{}
 			respBuy, err := client1.Do(req)
-			defer respBuy.Body.Close()
+			defer func() {
+				err = respBuy.Body.Close()
+				assert.NoError(t, err)
+			}()
 
 			assert.NoError(t, err)
-
 			assert.Equal(t, tt.wantStatusTransfer, respBuy.StatusCode)
 		})
 	}

@@ -13,29 +13,37 @@ import (
 func TestE2EAuth(t *testing.T) {
 	URL := "http://127.0.0.1:8080/api"
 
-	username := "testuser"
-	password := "secret"
-	password1 := "not-secret"
+	username := RandomString(30)
+	password := RandomString(30)
+	password1 := RandomString(30)
 
-	userReq, _ := json.Marshal(authReq{
+	userReq, err := json.Marshal(authReq{
 		Username: username,
 		Password: password,
 	})
 
-	userWithAnotherPass, _ := json.Marshal(authReq{
+	assert.NoError(t, err)
+
+	userWithAnotherPass, err := json.Marshal(authReq{
 		Username: username,
 		Password: password1,
 	})
 
-	userReqWithZeroUsername, _ := json.Marshal(authReq{
+	assert.NoError(t, err)
+
+	userReqWithZeroUsername, err := json.Marshal(authReq{
 		Username: "",
 		Password: password,
 	})
 
-	userReqWithZeroPass, _ := json.Marshal(authReq{
+	assert.NoError(t, err)
+
+	userReqWithZeroPass, err := json.Marshal(authReq{
 		Username: username,
 		Password: "",
 	})
+
+	assert.NoError(t, err)
 
 	type auth struct {
 		method   string
@@ -103,15 +111,18 @@ func TestE2EAuth(t *testing.T) {
 			var req *http.Request
 			var err error
 
-			req, err = http.NewRequest(tt.auth.method, fmt.Sprintf("%s%s", tt.url, tt.auth.endPoint), bytes.NewBuffer([]byte(tt.auth.body)))
-
+			req, err = http.NewRequest(tt.auth.method, fmt.Sprintf("%s%s", tt.url, tt.auth.endPoint),
+				bytes.NewBuffer(tt.auth.body))
 			assert.NoError(t, err)
 
 			client := &http.Client{}
 			respAuth, err := client.Do(req)
 
 			assert.NoError(t, err)
-			defer respAuth.Body.Close()
+			defer func() {
+				err = respAuth.Body.Close()
+				assert.NoError(t, err)
+			}()
 
 			assert.Equal(t, tt.wantStatusAuth, respAuth.StatusCode)
 
@@ -121,10 +132,10 @@ func TestE2EAuth(t *testing.T) {
 
 			var authResponse authResp
 
-			bodyBytes, _ := io.ReadAll(respAuth.Body)
+			bodyBytes, err := io.ReadAll(respAuth.Body)
+			assert.NoError(t, err)
 
 			err = json.Unmarshal(bodyBytes, &authResponse)
-
 			assert.NoError(t, err)
 
 			assert.Equal(t, respAuth.StatusCode, tt.wantStatusAuth)
