@@ -1,6 +1,7 @@
 package merch
 
 import (
+	"errors"
 	"merch/internal/api/utilapi"
 	"merch/internal/entity"
 	"net/http"
@@ -25,20 +26,36 @@ type (
 	}
 
 	UserInfoResp struct {
-		Coins       int         `json:"coins"`
-		Inventory   []Item      `json:"inventory"`
+		Coins int `json:"coins"`
+
+		Inventory []Item `json:"inventory"`
+
 		CoinHistory CoinHistory `json:"coinHistory"`
 	}
 )
 
 func (m *MerchHandler) Info(ctx *utilapi.APIContext) {
-	username := ctx.GetValue("username").(string)
-	idURL := ctx.GetValue("id").(string)
-	id, _ := strconv.Atoi(idURL)
+	username, ok := ctx.GetValue("username").(string)
+	if !ok {
+		ctx.Error("failed to get username from ctx", errors.New("invalid type"))
+		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
+		return
+	}
+	idURL, ok := ctx.GetValue("id").(string)
+	if !ok {
+		ctx.Error("failed to get id from ctx", errors.New("invalid type"))
+		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
+		return
+	}
+	id, err := strconv.Atoi(idURL)
+	if err != nil {
+		ctx.Error("failed to convert string", err)
+		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
+		return
+	}
 
 	var userInfo entity.User
 	var history []entity.CoinHistory
-	var err error
 
 	userInfo, history, err = m.user.GetInfo(ctx, id, username)
 	if err != nil {

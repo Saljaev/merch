@@ -9,8 +9,8 @@ import (
 
 type JWTManager struct {
 	secret        string
-	tokenDuration time.Duration
 	issuer        string
+	tokenDuration time.Duration
 }
 
 func NewJWTManager(s, i string, d time.Duration) *JWTManager {

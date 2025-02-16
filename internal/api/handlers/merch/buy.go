@@ -21,11 +21,26 @@ func (m *MerchHandler) Buy(ctx *utilapi.APIContext) {
 		return
 	}
 
-	username := ctx.GetValue("username").(string)
-	idURL := ctx.GetValue("id").(string)
-	id, _ := strconv.Atoi(idURL)
+	username, ok := ctx.GetValue("username").(string)
+	if !ok {
+		ctx.Error("failed to get username string from ctx", errors.New("invalid type"))
+		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
+		return
+	}
+	idURL, ok := ctx.GetValue("id").(string)
+	if !ok {
+		ctx.Error("failed to get id from ctx", errors.New("invalid type"))
+		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
+		return
+	}
+	id, err := strconv.Atoi(idURL)
+	if err != nil {
+		ctx.Error("failed to convert id", err)
+		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
+		return
+	}
 
-	err := m.user.Purchase(ctx, id, username, item)
+	err = m.user.Purchase(ctx, id, username, item)
 	if err != nil {
 		ctx.Error("failed to buy item", err)
 		if errors.Is(errors.Unwrap(err), usecase.ErrNotEnoughCoin) {

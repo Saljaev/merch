@@ -32,9 +32,25 @@ func (m *MerchHandler) SendCoin(ctx *utilapi.APIContext) {
 		return
 	}
 
-	fromUsername := ctx.GetValue("username").(string)
-	idURL := ctx.GetValue("id").(string)
-	fromID, _ := strconv.Atoi(idURL)
+	fromUsername, ok := ctx.GetValue("username").(string)
+	if !ok {
+		ctx.Error("failed to convert ctx username", errors.New("invalid type"))
+		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
+		return
+	}
+	idURL, ok := ctx.GetValue("id").(string)
+	if !ok {
+		ctx.Error("failed to convert ctx id", errors.New("invalid type"))
+		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
+		return
+
+	}
+	fromID, err := strconv.Atoi(idURL)
+	if err != nil {
+		ctx.Error("failed to convert id", err)
+		ctx.WriteFailure(http.StatusInternalServerError, "internal error")
+		return
+	}
 
 	if fromUsername == req.ToUser {
 		ctx.Error("failed to transfer", ErrTransferToYourself)
