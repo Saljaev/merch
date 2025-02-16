@@ -1,11 +1,11 @@
 package entity
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"github.com/sony/sonyflake"
+	"golang.org/x/crypto/bcrypt"
 	"log/slog"
+	"math"
 )
 
 const DefaultCoins = 1000
@@ -21,32 +21,45 @@ func InitSonyflake() {
 }
 
 type User struct {
-	ID        int64
-	Password  string
-	Coins     int
-	UserName  string
+	ID int64
+
+	Coins int
+
+	Password string
+	UserName string
+
 	Inventory []Inventory
 }
 
 type Inventory struct {
-	UserID   int64
-	Item     string
 	Quantity int
+
+	UserID int64
+
+	Item string
 }
 
 type CoinHistory struct {
+	Amount int
+
 	FromUser string
 	ToUser   string
-	Amount   int
 	Type     string
 }
 
 func NewUser(username, password string) (User, error) {
-	hashedPassword := HashPassword(password)
-	
+	hashedPassword, err := HashPassword(password)
+	if err != nil {
+		return User{}, err
+	}
+
 	userID, err := sf.NextID()
 	if err != nil {
 		return User{}, fmt.Errorf("failed to generate userID: %w", err)
+	}
+
+	if userID > math.MaxInt64 {
+		return User{}, err
 	}
 
 	return User{
@@ -58,11 +71,18 @@ func NewUser(username, password string) (User, error) {
 	}, nil
 }
 
-func HashPassword(password string) string {
-	hash := md5.Sum([]byte(password))
-	return hex.EncodeToString(hash[:])
+func HashPassword(password string) (string, error) {
+	//hash := md5.Sum([]byte(password))
+	//return hex.EncodeToString(hash[:])
+	hashPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hashPassword), nil
 }
 
 func (u *User) Identification(password string) bool {
-	return HashPassword(password) == u.Password
+	err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
+	return err == nil
+	//return HashPassword(password) == u.Password
 }
